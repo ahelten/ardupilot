@@ -1943,7 +1943,9 @@ void AP_GPS::Write_GPS(uint8_t i)
         ground_course : ground_course(i),
         vel_z         : velocity(i).z,
         yaw           : yaw_deg,
-        used          : (uint8_t)(AP::gps().primary_sensor() == i)
+        used          : (uint8_t)(AP::gps().primary_sensor() == i),
+        lat_hp        : loc.lat_hp,
+        lng_hp        : loc.lng_hp
     };
     AP::logger().WriteBlock(&pkt, sizeof(pkt));
 

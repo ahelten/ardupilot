@@ -27,6 +27,21 @@ bool ModeAuto::_enter()
 
     // restart mission processing
     mission.start_or_resume();
+
+    rover.avg_xtrack_corner_total = 0.0f;
+    rover.avg_xtrack_corner_count = 0;
+    rover.avg_xtrack_straight_total = 0.0f;
+    rover.avg_xtrack_straight_count = 0;
+
+    ap_var_type ptype;
+    AP_Float *ap_slow_limit;
+    ap_slow_limit = (AP_Float *)AP_Param::find("WP_SLOW_LIMIT", &ptype);
+    if (ap_slow_limit == nullptr || ptype != AP_PARAM_FLOAT) {
+      rover._slow_limit=9999.0f;
+    } else {
+      rover._slow_limit=ap_slow_limit->get();
+    }
+
     return true;
 }
 
@@ -46,6 +61,18 @@ void ModeAuto::update()
             if (!g2.wp_nav.reached_destination()) {
                 // update navigation controller
                 navigate_to_waypoint();
+
+                // update xtrack stats:
+                if(rover.current_loc.get_distance(g2.wp_nav.get_destination()) < rover._slow_limit || rover.current_loc.get_distance(g2.wp_nav.get_origin()) < rover._slow_limit){
+                  rover.avg_xtrack_corner_total += fabs(rover.g2.wp_nav.crosstrack_error());
+                  rover.avg_xtrack_corner_count++;
+                  rover.xtrack_corner_max = fabs(rover.g2.wp_nav.crosstrack_error()) > rover.xtrack_corner_max ? fabs(rover.g2.wp_nav.crosstrack_error()):rover.xtrack_corner_max;
+                } else { //straight:
+                  rover.avg_xtrack_straight_total += fabs(rover.g2.wp_nav.crosstrack_error());
+                  rover.avg_xtrack_straight_count++;
+                  rover.xtrack_straight_max = fabs(rover.g2.wp_nav.crosstrack_error()) > rover.xtrack_straight_max ? fabs(rover.g2.wp_nav.crosstrack_error()):rover.xtrack_straight_max;
+                }
+
             } else {
                 // we have reached the destination so stay here
                 if (rover.is_boat()) {
@@ -439,7 +466,18 @@ void ModeAuto::exit_mission()
     // play a tone
     AP_Notify::events.mission_complete = 1;
     // send message
-    gcs().send_text(MAV_SEVERITY_NOTICE, "Mission Complete");
+    float xtrack_straight;
+    float xtrack_corner;
+    float xtrack_oa;
+
+    xtrack_straight = rover.avg_xtrack_straight_count>0?rover.avg_xtrack_straight_total/rover.avg_xtrack_straight_count:9999.0f;
+    xtrack_corner = rover.avg_xtrack_corner_count>0?rover.avg_xtrack_corner_total/rover.avg_xtrack_corner_count:9999.0f;
+    xtrack_oa = (rover.avg_xtrack_straight_count+rover.avg_xtrack_corner_count)>0?(rover.avg_xtrack_straight_total+rover.avg_xtrack_corner_total)/(rover.avg_xtrack_straight_count+rover.avg_xtrack_corner_count):9999.0f;
+
+    gcs().send_text(MAV_SEVERITY_NOTICE, "Mission Complete\n");
+    gcs().send_text(MAV_SEVERITY_INFO,"Avg xtrack straight: %.2f, Max: %.2f",xtrack_straight, rover.xtrack_straight_max);
+    gcs().send_text(MAV_SEVERITY_INFO,"Avg xtrack corner: %.2f, Max: %.2f",xtrack_corner, rover.xtrack_corner_max);
+    gcs().send_text(MAV_SEVERITY_INFO,"Avg xtrack total: %.2f\n",xtrack_oa);
 
     if (g2.mis_done_behave == MIS_DONE_BEHAVE_LOITER && start_loiter()) {
         return;

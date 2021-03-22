@@ -60,6 +60,7 @@ public:
 
     // get object avoidance adjusted destination. Note: this is not guaranteed to be valid (i.e. _orig_and_dest_valid is not checked)
     const Location &get_oa_destination() { return _oa_destination; }
+    const Location &get_origin() { return _origin; }
 
     // return heading (in degrees) and cross track error (in meters) for reporting to ground station (NAV_CONTROLLER_OUTPUT message)
     float wp_bearing_cd() const { return _wp_bearing_cd; }
@@ -123,6 +124,9 @@ private:
     AP_Float _overshoot;            // maximum horizontal overshoot in meters
     AP_Int16 _pivot_angle;          // angle error that leads to pivot turn
     AP_Int16 _pivot_rate;           // desired turn rate during pivot turns in deg/sec
+    AP_Float _slow_limit;           // distance from WP beyond which speed limiting is ignored
+    AP_Float _slow_rate;            // rate multiplier at which rover slows for next WP. 1X = max_decel rate
+    AP_Float _corner_rate;          // rate multiplier for lateral accel when within WP_SLOW_LIMIT of next WP
 
     // references
     AR_AttitudeControl& _atc;       // rover attitude control library

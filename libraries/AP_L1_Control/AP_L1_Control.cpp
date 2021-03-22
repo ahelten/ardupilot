@@ -314,6 +314,17 @@ void AP_L1_Control::update_waypoint(const struct Location &prev_WP, const struct
         // to converge to zero we must push Nu1 harder
         Nu1 += _L1_xtrack_i;
 
+#ifdef INCLUDE_JO_HP_LOCATION_L1_CHANGES
+        //JO: Reduce i term when crossing path
+        if((_crosstrack_error > 0 && last_xtrack < 0) || (_crosstrack_error < 0 && last_xtrack > 0)){
+            // to converge to zero we must push Nu1 harder
+            Nu1 += (_L1_xtrack_i/2.0f);
+        } else {
+            Nu1 += _L1_xtrack_i;
+        }
+        last_xtrack = _crosstrack_error;
+#endif
+
         Nu = Nu1 + Nu2;
         _nav_bearing = atan2f(AB.y, AB.x) + Nu1; // bearing (radians) from AC to L1 point
     }
@@ -324,6 +335,10 @@ void AP_L1_Control::update_waypoint(const struct Location &prev_WP, const struct
     //Limit Nu to +-(pi/2)
     Nu = constrain_float(Nu, -1.5708f, +1.5708f);
     _latAccDem = K_L1 * groundSpeed * groundSpeed / _L1_dist * sinf(Nu);
+
+#ifdef INCLUDE_JO_HP_LOCATION_L1_CHANGES
+    if(fabs(_crosstrack_error) < 0.5) _latAccDem *= 3;
+#endif
 
     // Waypoint capture status is always false during waypoint following
     _WPcircle = false;

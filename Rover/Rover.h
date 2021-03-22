@@ -416,6 +416,14 @@ private:
     static_assert(_failsafe_priorities[ARRAY_SIZE(_failsafe_priorities) - 1] == -1,
                   "_failsafe_priorities is missing the sentinel");
 
+    double avg_xtrack_corner_total = 0.0f;
+    float xtrack_corner_max = 0.0f;
+    unsigned long avg_xtrack_corner_count = 0;
+    double avg_xtrack_straight_total = 0.0f;
+    float xtrack_straight_max = 0.0f;
+    unsigned long avg_xtrack_straight_count = 0;
+    float _slow_limit = 9999.0f;
+
 
 public:
     void failsafe_check();

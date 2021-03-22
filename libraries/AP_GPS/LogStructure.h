@@ -29,6 +29,8 @@
 // @Field: VZ: vertical speed
 // @Field: Yaw: vehicle yaw
 // @Field: U: boolean value indicating whether this GPS is in use
+// @Field: lat_hp: high-precision latitude digits (up to 1e-9)
+// @Field: lng_hp: high-precision longitude digits (up to 1e-9)
 struct PACKED log_GPS {
     LOG_PACKET_HEADER;
     uint64_t time_us;
@@ -46,6 +48,8 @@ struct PACKED log_GPS {
     float    vel_z;
     float    yaw;
     uint8_t  used;
+    int8_t  lat_hp;
+    int8_t  lng_hp;
 };
 
 // @LoggerMessage: GPA

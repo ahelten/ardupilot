@@ -923,7 +923,7 @@ AP_GPS_UBLOX::_parse_gps(void)
     if (_class == CLASS_CFG) {
         switch(_msg_id) {
         case  MSG_CFG_NAV_SETTINGS:
-	    Debug("Got settings %u min_elev %d drLimit %u\n", 
+	    Debug("Got settings %u min_elev %d drLimit %u\n",
                   (unsigned)_buffer.nav_settings.dynModel,
                   (int)_buffer.nav_settings.minElev,
                   (unsigned)_buffer.nav_settings.drLimit);
@@ -1012,7 +1012,7 @@ AP_GPS_UBLOX::_parse_gps(void)
 
         case MSG_CFG_SBAS:
             if (gps._sbas_mode != 2) {
-	        Debug("Got SBAS settings %u %u %u 0x%x 0x%x\n", 
+	        Debug("Got SBAS settings %u %u %u 0x%x 0x%x\n",
                       (unsigned)_buffer.sbas.mode,
                       (unsigned)_buffer.sbas.usage,
                       (unsigned)_buffer.sbas.maxSBAS,
@@ -1061,11 +1061,11 @@ AP_GPS_UBLOX::_parse_gps(void)
                 _unconfigured_messages &= ~CONFIG_RATE_NAV;
             }
             return false;
-            
+
 #if CONFIGURE_PPS_PIN
         case MSG_CFG_TP5: {
             // configure the PPS pin for 1Hz, zero delay
-            Debug("Got TP5 ver=%u 0x%04x %u\n", 
+            Debug("Got TP5 ver=%u 0x%04x %u\n",
                   (unsigned)_buffer.nav_tp5.version,
                   (unsigned)_buffer.nav_tp5.flags,
                   (unsigned)_buffer.nav_tp5.freqPeriod);
@@ -1162,14 +1162,14 @@ AP_GPS_UBLOX::_parse_gps(void)
             break;
         case MSG_MON_HW2:
             if (_payload_length == 28) {
-                log_mon_hw2();  
+                log_mon_hw2();
             }
             break;
         case MSG_MON_VER:
             _have_version = true;
             strncpy(_version.hwVersion, _buffer.mon_ver.hwVersion, sizeof(_version.hwVersion));
             strncpy(_version.swVersion, _buffer.mon_ver.swVersion, sizeof(_version.swVersion));
-            GCS_SEND_TEXT(MAV_SEVERITY_INFO, 
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO,
                                              "u-blox %d HW: %s SW: %s",
                                              state.instance + 1,
                                              _version.hwVersion,
@@ -1217,7 +1217,7 @@ AP_GPS_UBLOX::_parse_gps(void)
     switch (_msg_id) {
     case MSG_POSLLH:
         Debug("MSG_POSLLH next_fix=%u", next_fix);
-        if (havePvtMsg) {
+        if (havePvtMsg || haveHpposMsg) {
             _unconfigured_messages |= CONFIG_RATE_POSLLH;
             break;
         }
@@ -1230,6 +1230,30 @@ AP_GPS_UBLOX::_parse_gps(void)
         _new_position = true;
         state.horizontal_accuracy = _buffer.posllh.horizontal_accuracy*1.0e-3f;
         state.vertical_accuracy = _buffer.posllh.vertical_accuracy*1.0e-3f;
+        state.have_horizontal_accuracy = true;
+        state.have_vertical_accuracy = true;
+#if UBLOX_FAKE_3DLOCK
+        state.location.lng = 1491652300L;
+        state.location.lat = -353632610L;
+        state.location.alt = 58400;
+        state.vertical_accuracy = 0;
+        state.horizontal_accuracy = 0;
+#endif
+        break;
+    case MSG_HPPOSLLH:
+        Debug("MSG_HPPOSLLH next_fix=%u", next_fix);
+        haveHpposMsg = true;
+        _check_new_itow(_buffer.posllh.itow);
+        _last_pos_time        = _buffer.hpposllh.itow;
+        state.location.lng    = _buffer.hpposllh.longitude;
+        state.location.lat    = _buffer.hpposllh.latitude;
+        state.location.alt    = _buffer.hpposllh.altitude_msl / 10;
+        state.location.lng_hp = _buffer.hpposllh.lonHp;
+        state.location.lat_hp = _buffer.hpposllh.latHp;
+        state.status          = next_fix;
+        _new_position = true;
+        state.horizontal_accuracy = _buffer.hpposllh.horizontal_accuracy*1.0e-3f;
+        state.vertical_accuracy = _buffer.hpposllh.vertical_accuracy*1.0e-3f;
         state.have_horizontal_accuracy = true;
         state.have_vertical_accuracy = true;
 #if UBLOX_FAKE_3DLOCK
@@ -1367,13 +1391,7 @@ AP_GPS_UBLOX::_parse_gps(void)
 
         havePvtMsg = true;
         // position
-        _check_new_itow(_buffer.pvt.itow);
-        _last_pvt_itow = _buffer.pvt.itow;
-        _last_pos_time        = _buffer.pvt.itow;
-        state.location.lng    = _buffer.pvt.lon;
-        state.location.lat    = _buffer.pvt.lat;
-        state.location.alt    = _buffer.pvt.h_msl / 10;
-        switch (_buffer.pvt.fix_type) 
+        switch (_buffer.pvt.fix_type)
         {
             case 0:
                 state.status = AP_GPS::NO_FIX;
@@ -1405,15 +1423,24 @@ AP_GPS_UBLOX::_parse_gps(void)
                 state.status = AP_GPS::NO_FIX;
                 break;
         }
+        //JO: Use HPPOSLLH if available:
+        if(!haveHpposMsg){
+            _check_new_itow(_buffer.pvt.itow);
+            _last_pos_time        = _buffer.pvt.itow;
+            _last_pvt_itow        = _buffer.pvt.itow;
+            state.location.lng    = _buffer.pvt.lon;
+            state.location.lat    = _buffer.pvt.lat;
+            state.location.alt    = _buffer.pvt.h_msl / 10;
+            _new_position = true;
+            state.horizontal_accuracy = _buffer.pvt.h_acc*1.0e-3f;
+            state.vertical_accuracy = _buffer.pvt.v_acc*1.0e-3f;
+            state.have_horizontal_accuracy = true;
+            state.have_vertical_accuracy = true;
+        }
         next_fix = state.status;
-        _new_position = true;
-        state.horizontal_accuracy = _buffer.pvt.h_acc*1.0e-3f;
-        state.vertical_accuracy = _buffer.pvt.v_acc*1.0e-3f;
-        state.have_horizontal_accuracy = true;
-        state.have_vertical_accuracy = true;
         // SVs
         state.num_sats    = _buffer.pvt.num_sv;
-        // velocity     
+        // velocity
         _last_vel_time         = _buffer.pvt.itow;
         state.ground_speed     = _buffer.pvt.gspeed*0.001f;          // m/s
         state.ground_course    = wrap_360(_buffer.pvt.head_mot * 1.0e-5f);       // Heading 2D deg * 100000
@@ -1429,9 +1456,9 @@ AP_GPS_UBLOX::_parse_gps(void)
             state.hdop        = _buffer.pvt.p_dop;
             state.vdop        = _buffer.pvt.p_dop;
         }
-                    
+
         state.last_gps_time_ms = AP_HAL::millis();
-        
+
         // time
         state.time_week_ms    = _buffer.pvt.itow;
 #if UBLOX_FAKE_3DLOCK
@@ -1524,7 +1551,7 @@ AP_GPS_UBLOX::_parse_gps(void)
         if (AP_HAL::millis() - _last_relposned_ms > 400) {
             // we have stopped receiving RELPOSNED messages, disable yaw reporting
             state.have_gps_yaw = false;
-        } else if (_last_relposned_itow != _last_pvt_itow) {
+        } else if (_last_relposned_itow != _last_pos_time) {
             // wait until ITOW matches
             return false;
         }

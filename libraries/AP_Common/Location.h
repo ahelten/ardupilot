@@ -10,16 +10,20 @@ class Location
 {
 public:
 
-    uint8_t relative_alt : 1;           // 1 if altitude is relative to home
-    uint8_t loiter_ccw   : 1;           // 0 if clockwise, 1 if counter clockwise
-    uint8_t terrain_alt  : 1;           // this altitude is above terrain
-    uint8_t origin_alt   : 1;           // this altitude is above ekf origin
+
+    uint8_t relative_alt  : 1;           // 1 if altitude is relative to home
+    uint8_t loiter_ccw    : 1;           // 0 if clockwise, 1 if counter clockwise
+    uint8_t terrain_alt   : 1;           // this altitude is above terrain
+    uint8_t origin_alt    : 1;           // this altitude is above ekf origin
     uint8_t loiter_xtrack : 1;          // 0 to crosstrack from center of waypoint, 1 to crosstrack from tangent exit location
 
     // note that mission storage only stores 24 bits of altitude (~ +/- 83km)
     int32_t alt;
     int32_t lat;
     int32_t lng;
+
+    int8_t lat_hp;
+    int8_t lng_hp;
 
     /// enumeration of possible altitude types
     enum class AltFrame {
@@ -32,6 +36,7 @@ public:
     /// constructors
     Location();
     Location(int32_t latitude, int32_t longitude, int32_t alt_in_cm, AltFrame frame);
+    Location(int32_t latitude, int32_t longitude, int8_t latitude_hp, int8_t longitude_hp, int32_t alt_in_cm, AltFrame frame);
     Location(const Vector3f &ekf_offset_neu);
 
     static void set_terrain(AP_Terrain* terrain) { _terrain = terrain; }
@@ -125,6 +130,11 @@ private:
     // scaling factor from 1e-7 degrees to meters at equator
     // == 1.0e-7 * DEG_TO_RAD * RADIUS_OF_EARTH
     static constexpr float LOCATION_SCALING_FACTOR = 0.011131884502145034f;
+    static constexpr float LOCATION_SCALING_FACTOR_LNG = 0.0111319490793274f; //Based on radius at equator
+    static constexpr float LOCATION_SCALING_FACTOR_LAT = 0.0110946257368722f; // Based on radius through poles
+
     // inverse of LOCATION_SCALING_FACTOR
     static constexpr float LOCATION_SCALING_FACTOR_INV = 89.83204953368922f;
+    static constexpr float LOCATION_SCALING_FACTOR_LNG_INV = 89.83152841195212f;
+    static constexpr float LOCATION_SCALING_FACTOR_LAT_INV = 90.13372994427121f;
 };

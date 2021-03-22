@@ -26,6 +26,7 @@ extern const AP_HAL::HAL& hal;
 #define AR_WPNAV_PIVOT_ANGLE_DEFAULT    60
 #define AR_WPNAV_PIVOT_ANGLE_ACCURACY   10      // vehicle will pivot to within this many degrees of destination
 #define AR_WPNAV_PIVOT_RATE_DEFAULT     90
+#define AR_WPNAV_SLOW_LIMIT_DEFAULT     9999.0f
 
 const AP_Param::GroupInfo AR_WPNav::var_info[] = {
 
@@ -83,6 +84,33 @@ const AP_Param::GroupInfo AR_WPNav::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("SPEED_MIN", 6, AR_WPNav, _speed_min, 0),
 
+    // @Param: SLOW_LIMIT
+    // @DisplayName: Waypoint slow limit
+    // @Description: Vehicle will not slow down when greater than this distance from the next WP.
+    // @Units: m
+    // @Range: 0 999
+    // @Increment: 0.1
+    // @User: Standard
+    AP_GROUPINFO("SLOW_LIMIT", 7, AR_WPNav, _slow_limit, AR_WPNAV_SLOW_LIMIT_DEFAULT),
+
+    // @Param: SLOW_RATE
+    // @DisplayName: Waypoint slow rate
+    // @Description: Slow down quicker by this rate when approaching the next WP.
+    // @Units: 1
+    // @Range: 0 1
+    // @Increment: 0.1
+    // @User: Standard
+    AP_GROUPINFO("SLOW_RATE", 8, AR_WPNav, _slow_rate, 1),
+
+    // @Param: CORNER_RATE
+    // @DisplayName: Waypoint corner rate
+    // @Description: Vehicle will increase lateral accel by this factor when within WP_SLOW_LIMIT.
+    // @Units: 1
+    // @Range: 0 1
+    // @Increment: 0.1
+    // @User: Standard
+    AP_GROUPINFO("CORNER_RATE", 9, AR_WPNav, _corner_rate, 1),
+
     AP_GROUPEND
 };
 
@@ -113,7 +141,7 @@ void AR_WPNav::update(float dt)
 
     // run path planning around obstacles
     bool stop_vehicle = false;
-   
+
     // true if OA has been recently active;
     bool _oa_was_active = _oa_active;
 
@@ -375,6 +403,9 @@ void AR_WPNav::update_steering(const Location& current_loc, float current_speed)
 
         // retrieve lateral acceleration, heading back towards line and crosstrack error
         _desired_lat_accel = constrain_float(_nav_controller.lateral_acceleration(), -_turn_max_mss, _turn_max_mss);
+        if(_oa_distance_to_destination < _slow_limit || current_loc.get_distance(_origin) < _slow_limit){
+          _desired_lat_accel*=_corner_rate;
+        }
         _desired_heading_cd = wrap_360_cd(_nav_controller.nav_bearing_cd());
         if (_reversed) {
             _desired_lat_accel *= -1.0f;
@@ -428,7 +459,8 @@ void AR_WPNav::update_desired_speed(float dt)
 
     // limit speed based on distance to waypoint and max acceleration/deceleration
     if (is_positive(_oa_distance_to_destination) && is_positive(_atc.get_decel_max())) {
-        const float dist_speed_max = safe_sqrt(2.0f * _oa_distance_to_destination * _atc.get_decel_max() + sq(_desired_speed_final));
+        _slow_rate = constrain_float(_slow_rate, 0.0f, 1.0f);
+        const float dist_speed_max = _slow_rate * safe_sqrt(2.0f * _oa_distance_to_destination * _atc.get_decel_max() + sq(_desired_speed_final));
         des_speed_lim = constrain_float(des_speed_lim, -dist_speed_max, dist_speed_max);
     }
 

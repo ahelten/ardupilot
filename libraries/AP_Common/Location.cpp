@@ -7,6 +7,8 @@
 #include <AP_AHRS/AP_AHRS.h>
 #include <AP_Terrain/AP_Terrain.h>
 
+extern const AP_HAL::HAL& hal;
+
 AP_Terrain *Location::_terrain = nullptr;
 
 /// constructors
@@ -34,6 +36,15 @@ Location::Location(int32_t latitude, int32_t longitude, int32_t alt_in_cm, AltFr
     set_alt_cm(alt_in_cm, frame);
 }
 
+Location::Location(int32_t latitude, int32_t longitude, int8_t latitude_hp, int8_t longitude_hp, int32_t alt_in_cm, AltFrame frame){
+  zero();
+  lat = latitude;
+  lng = longitude;
+  lat_hp = latitude_hp;
+  lng_hp = longitude_hp;
+  set_alt_cm(alt_in_cm, frame);
+}
+
 Location::Location(const Vector3f &ekf_offset_neu)
 {
     // store alt and alt frame
@@ -44,6 +55,9 @@ Location::Location(const Vector3f &ekf_offset_neu)
     if (AP::ahrs().get_origin(ekf_origin)) {
         lat = ekf_origin.lat;
         lng = ekf_origin.lng;
+        lat_hp = ekf_origin.lat_hp;
+        lng_hp = ekf_origin.lng_hp;
+
         offset(ekf_offset_neu.x / 100.0f, ekf_offset_neu.y / 100.0f);
     }
 }
@@ -190,8 +204,11 @@ bool Location::get_vector_xy_from_origin_NE(Vector2f &vec_ne) const
     if (!AP::ahrs().get_origin(ekf_origin)) {
         return false;
     }
-    vec_ne.x = (lat-ekf_origin.lat) * LATLON_TO_CM;
-    vec_ne.y = (lng-ekf_origin.lng) * LATLON_TO_CM * ekf_origin.longitude_scale();
+
+    vec_ne = get_distance_NE(ekf_origin);
+    vec_ne.x *= -1;
+    vec_ne.y *= -1;
+
     return true;
 }
 
@@ -218,9 +235,8 @@ bool Location::get_vector_from_origin_NEU(Vector3f &vec_neu) const
 // return distance in meters between two locations
 float Location::get_distance(const struct Location &loc2) const
 {
-    float dlat = (float)(loc2.lat - lat);
-    float dlng = ((float)(loc2.lng - lng)) * loc2.longitude_scale();
-    return norm(dlat, dlng) * LOCATION_SCALING_FACTOR;
+  Vector2f vec_ne = get_distance_NE(loc2);
+  return vec_ne.length();
 }
 
 
@@ -230,25 +246,49 @@ float Location::get_distance(const struct Location &loc2) const
  */
 Vector2f Location::get_distance_NE(const Location &loc2) const
 {
-    return Vector2f((loc2.lat - lat) * LOCATION_SCALING_FACTOR,
-                    (loc2.lng - lng) * LOCATION_SCALING_FACTOR * longitude_scale());
+  double loc1_lat_hp, loc1_lng_hp, loc2_lat_hp, loc2_lng_hp;
+
+  loc1_lat_hp = (double)lat + (lat_hp / 100.0f);
+  loc1_lng_hp = (double)lng + (lng_hp / 100.0f);
+  loc2_lat_hp = (double)loc2.lat + (loc2.lat_hp / 100.0f);
+  loc2_lng_hp = (double)loc2.lng + (loc2.lng_hp / 100.0f);
+
+  float dlat = loc2_lat_hp - loc1_lat_hp;
+  float dlng = loc2_lng_hp - loc1_lng_hp;
+  dlat *= LOCATION_SCALING_FACTOR_LAT;
+  dlng *= LOCATION_SCALING_FACTOR_LNG * loc2.longitude_scale();
+
+  return Vector2f(dlat,dlng);
 }
 
 // return the distance in meters in North/East/Down plane as a N/E/D vector to loc2
 Vector3f Location::get_distance_NED(const Location &loc2) const
 {
-    return Vector3f((loc2.lat - lat) * LOCATION_SCALING_FACTOR,
-                    (loc2.lng - lng) * LOCATION_SCALING_FACTOR * longitude_scale(),
-                    (alt - loc2.alt) * 0.01f);
+      Vector2f vec_ne = get_distance_NE(loc2);
+      return Vector3f(vec_ne.x, vec_ne.y, (alt - loc2.alt) * 0.01f);
 }
 
 // extrapolate latitude/longitude given distances (in meters) north and east
 void Location::offset(float ofs_north, float ofs_east)
 {
-    const int32_t dlat = ofs_north * LOCATION_SCALING_FACTOR_INV;
-    const int32_t dlng = (ofs_east * LOCATION_SCALING_FACTOR_INV) / longitude_scale();
-    lat += dlat;
-    lng += dlng;
+        double dlat = (ofs_north * LOCATION_SCALING_FACTOR_LAT_INV);
+        double dlng = ((ofs_east * LOCATION_SCALING_FACTOR_LNG_INV)/ longitude_scale());
+        double hplat = (double) lat + (lat_hp / 100.0f);
+        double hplng = (double)lng + (lng_hp / 100.0f);
+
+        hplat += dlat;
+        hplng += dlng;
+
+        double intpart;
+        double fractpart;
+
+        fractpart = modf(hplat, &intpart);
+        lat = (int32_t)intpart;
+        lat_hp = (int8_t)(fractpart * 100.0f);
+
+        fractpart = modf(hplng, &intpart);
+        lng = (int32_t)intpart;
+        lng_hp = (int8_t)(fractpart * 100.0f);
 }
 
 /*
@@ -313,8 +353,11 @@ bool Location::sanitize(const Location &defaultLoc)
 }
 
 // make sure we know what size the Location object is:
-assert_storage_size<Location, 16> _assert_storage_size_Location;
-
+//JO:
+// **** NOT SURE OF THE IMPLICATION OF INCREASING THIS SIZE! ****
+//assert_storage_size<Location, 16> _assert_storage_size_Location;
+//increase size to allow for lat_hp, lng_hp
+assert_storage_size<Location, 20> _assert_storage_size_Location;
 
 // return bearing in centi-degrees from location to loc2
 int32_t Location::get_bearing_to(const struct Location &loc2) const

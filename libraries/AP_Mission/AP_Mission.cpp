@@ -857,7 +857,9 @@ MAV_MISSION_RESULT AP_Mission::mavlink_int_to_mission_cmd(const mavlink_mission_
         cmd.p1 = (passby << 8) | (acp & 0x00FF);
 #else
         // delay at waypoint in seconds (this is for copters???)
-        cmd.p1 = packet.param1;
+        //JO: Remove delay option as param2 is used for GPS high precision
+        //cmd.p1 = packet.param1;
+        cmd.p1 = 0;
 #endif
     }
     break;
@@ -1121,6 +1123,17 @@ MAV_MISSION_RESULT AP_Mission::mavlink_int_to_mission_cmd(const mavlink_mission_
         cmd.content.location.lng = packet.y;
 
         cmd.content.location.alt = packet.z * 100.0f;       // convert packet's alt (m) to cmd alt (cm)
+
+        //JO:
+        // Add high precision:
+        if(cmd.id==MAV_CMD_NAV_WAYPOINT){
+          uint16_t param1_bytes = packet.param1; // The extra two digits precision for the lat/long are encoded in param1
+          cmd.content.location.lat_hp = (param1_bytes & 0xFF) - 128; //Lower byte with 128 offset
+          cmd.content.location.lng_hp = ((param1_bytes >> 8) & 0x00FF) - 128; //Upper byte with 128 offset
+        } else { // No high precision information available
+          cmd.content.location.lat_hp = 0;
+          cmd.content.location.lng_hp = 0;
+        }
 
         switch (packet.frame) {
 
