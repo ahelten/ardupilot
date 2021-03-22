@@ -42,6 +42,7 @@
 #include <ardupilot/indication/SafetyState.h>
 #include <ardupilot/indication/Button.h>
 #include <ardupilot/equipment/trafficmonitor/TrafficReport.h>
+#include <ardupilot/gnss/Status.h>
 #include <uavcan/equipment/gnss/RTCMStream.h>
 #include <uavcan/equipment/power/BatteryInfo.h>
 #include <uavcan/protocol/debug/LogMessage.h>
@@ -1477,11 +1478,13 @@ void AP_Periph_FW::can_battery_update(void)
         pkt.state_of_charge_pct = battery.lib.capacity_remaining_pct(i);
         pkt.model_instance_id = i+1;
 
+#if !defined(HAL_PERIPH_BATTERY_SKIP_NAME)
         // example model_name: "org.ardupilot.ap_periph SN 123"
         char text[UAVCAN_EQUIPMENT_POWER_BATTERYINFO_MODEL_NAME_MAX_LENGTH+1] {};
         hal.util->snprintf(text, sizeof(text), "%s %d", AP_PERIPH_BATTERY_MODEL_NAME, serial_number);
         pkt.model_name.len = strlen(text);
         pkt.model_name.data = (uint8_t *)text;
+#endif //defined(HAL_PERIPH_BATTERY_SKIP_NAME)
 
         uint8_t buffer[UAVCAN_EQUIPMENT_POWER_BATTERYINFO_MAX_SIZE] {};
         const uint16_t total_size = uavcan_equipment_power_BatteryInfo_encode(&pkt, buffer);
@@ -1707,6 +1710,36 @@ void AP_Periph_FW::can_gps_update(void)
                         CANARD_TRANSFER_PRIORITY_LOW,
                         &buffer[0],
                         total_size);
+    }
+
+    // send the gnss status packet
+    {
+        ardupilot_gnss_Status status {};
+
+        status.healthy = gps.is_healthy();
+        if (gps.logging_present() && gps.logging_enabled() && !gps.logging_failed()) {
+            status.status |= ARDUPILOT_GNSS_STATUS_STATUS_LOGGING;
+        }
+        uint8_t idx; // unused
+        if (status.healthy && !gps.first_unconfigured_gps(idx)) {
+            status.status |= ARDUPILOT_GNSS_STATUS_STATUS_ARMABLE;
+        }
+
+        uint32_t error_codes;
+        if (gps.get_error_codes(error_codes)) {
+            status.error_codes = error_codes;
+        }
+
+        uint8_t buffer[ARDUPILOT_GNSS_STATUS_MAX_SIZE] {};
+        const uint16_t total_size = ardupilot_gnss_Status_encode(&status, buffer);
+        canardBroadcast(&canard,
+                        ARDUPILOT_GNSS_STATUS_SIGNATURE,
+                        ARDUPILOT_GNSS_STATUS_ID,
+                        &transfer_id,
+                        CANARD_TRANSFER_PRIORITY_LOW,
+                        &buffer[0],
+                        total_size);
+
     }
 #endif // HAL_PERIPH_ENABLE_GPS
 }
