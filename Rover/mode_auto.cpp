@@ -32,6 +32,8 @@ bool ModeAuto::_enter()
     rover.avg_xtrack_corner_count = 0;
     rover.avg_xtrack_straight_total = 0.0f;
     rover.avg_xtrack_straight_count = 0;
+    rover.xtrack_corner_max = 0;
+    rover.xtrack_straight_max = 0;
 
     ap_var_type ptype;
     AP_Float *ap_slow_limit;
@@ -466,18 +468,18 @@ void ModeAuto::exit_mission()
     // play a tone
     AP_Notify::events.mission_complete = 1;
     // send message
-    float xtrack_straight;
-    float xtrack_corner;
-    float xtrack_oa;
+    double xtrack_straight;
+    double xtrack_corner;
+    double xtrack_oa;
 
     xtrack_straight = rover.avg_xtrack_straight_count>0?rover.avg_xtrack_straight_total/rover.avg_xtrack_straight_count:9999.0f;
     xtrack_corner = rover.avg_xtrack_corner_count>0?rover.avg_xtrack_corner_total/rover.avg_xtrack_corner_count:9999.0f;
     xtrack_oa = (rover.avg_xtrack_straight_count+rover.avg_xtrack_corner_count)>0?(rover.avg_xtrack_straight_total+rover.avg_xtrack_corner_total)/(rover.avg_xtrack_straight_count+rover.avg_xtrack_corner_count):9999.0f;
 
     gcs().send_text(MAV_SEVERITY_NOTICE, "Mission Complete\n");
-    gcs().send_text(MAV_SEVERITY_INFO,"Avg xtrack straight: %.2f, Max: %.2f",xtrack_straight, rover.xtrack_straight_max);
-    gcs().send_text(MAV_SEVERITY_INFO,"Avg xtrack corner: %.2f, Max: %.2f",xtrack_corner, rover.xtrack_corner_max);
-    gcs().send_text(MAV_SEVERITY_INFO,"Avg xtrack total: %.2f\n",xtrack_oa);
+    gcs().send_text(MAV_SEVERITY_INFO,"Avg xtrk straight: %.4f, Max: %.4f, Num: %lu",xtrack_straight, rover.xtrack_straight_max, rover.avg_xtrack_straight_count);
+    gcs().send_text(MAV_SEVERITY_INFO,"Avg xtrk corner: %.4f, Max: %.4f, Num: %lu",xtrack_corner, rover.xtrack_corner_max, rover.avg_xtrack_corner_count);
+    gcs().send_text(MAV_SEVERITY_INFO,"Avg xtrk total: %.4f\n",xtrack_oa);
 
     if (g2.mis_done_behave == MIS_DONE_BEHAVE_LOITER && start_loiter()) {
         return;
