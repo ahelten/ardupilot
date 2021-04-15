@@ -29,8 +29,7 @@
 // @Field: VZ: vertical speed
 // @Field: Yaw: vehicle yaw
 // @Field: U: boolean value indicating whether this GPS is in use
-// @Field: lat_hp: high-precision latitude digits (up to 1e-9)
-// @Field: lng_hp: high-precision longitude digits (up to 1e-9)
+// @Field: lat_lng_hp: high byte contains high-precision latitude, lower byte contains high-precision longitude (both up to 1e-9)
 struct PACKED log_GPS {
     LOG_PACKET_HEADER;
     uint64_t time_us;
@@ -48,8 +47,7 @@ struct PACKED log_GPS {
     float    vel_z;
     float    yaw;
     uint8_t  used;
-    int8_t  lat_hp;
-    int8_t  lng_hp;
+    uint16_t lat_lng_hp;
 };
 
 // @LoggerMessage: GPA
@@ -200,7 +198,7 @@ struct PACKED log_GPS_RAWS {
 
 #define LOG_STRUCTURE_FROM_GPS \
     { LOG_GPS_MSG, sizeof(log_GPS), \
-      "GPS",  "QBBIHBcLLeffffB", "TimeUS,I,Status,GMS,GWk,NSats,HDop,Lat,Lng,Alt,Spd,GCrs,VZ,Yaw,U", "s#---SmDUmnhnh-", "F----0BGGB000--" }, \
+      "GPS",  "QBBIHBcLLeffffBH", "TimeUS,I,Status,GMS,GWk,NSats,HDop,Lat,Lng,Alt,Spd,GCrs,VZ,Yaw,U,lat_lng_hp", "s#---SmDUmnhnh--", "F----0BGGB000---" }, \
     { LOG_GPA_MSG,  sizeof(log_GPA), \
       "GPA",  "QBCCCCfBIH", "TimeUS,I,VDop,HAcc,VAcc,SAcc,YAcc,VV,SMS,Delta", "s#mmmnd-ss", "F-BBBB0-CC" }, \
     { LOG_GPS_UBX1_MSG, sizeof(log_Ubx1), \

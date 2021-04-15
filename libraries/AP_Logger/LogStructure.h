@@ -211,6 +211,7 @@ struct PACKED log_Error {
   uint8_t error_code;
 };
 
+
 struct PACKED log_Message {
     LOG_PACKET_HEADER;
     uint64_t time_us;
@@ -833,38 +834,6 @@ struct PACKED log_PSCZ {
 // FMT messages define all message formats other than FMT
 // UNIT messages define units which can be referenced by FMTU messages
 // FMTU messages associate types (e.g. centimeters/second/second) to FMT message fields
-
-#define ACC_LABELS "TimeUS,SampleUS,AccX,AccY,AccZ"
-#define ACC_FMT   "QQfff"
-#define ACC_UNITS "ssnnn"
-#define ACC_MULTS "FF000"
-
-// see "struct sensor" in AP_Baro.h and "Write_Baro":
-#define BARO_LABELS "TimeUS,Alt,Press,Temp,CRt,SMS,Offset,GndTemp,Health"
-#define BARO_FMT   "QffcfIffB"
-#define BARO_UNITS "smPOnsmO-"
-#define BARO_MULTS "F00B0C?0-"
-
-#define GPA_LABELS "TimeUS,VDop,HAcc,VAcc,SAcc,YAcc,VV,SMS,Delta"
-#define GPA_FMT   "QCCCCfBIH"
-#define GPA_UNITS "smmmnd-ss"
-#define GPA_MULTS "FBBBB0-CC"
-
-// see "struct GPS_State" and "Write_GPS":
-#define GPS_LABELS "Tus,Stat,GMS,GWk,NSat,HDop,Lat,Lng,Alt,Spd,GCrs,VZ,Yaw,U,1,2"
-#define GPS_FMT   "QBIHBcLLeffffBbb"
-#define GPS_UNITS "s---SmDUmnhnh-??"
-#define GPS_MULTS "F---0BGGB000----"
-
-#define GYR_LABELS "TimeUS,SampleUS,GyrX,GyrY,GyrZ"
-#define GYR_FMT    "QQfff"
-#define GYR_UNITS  "ssEEE"
-#define GYR_MULTS  "FF000"
-
-#define IMT_LABELS "TimeUS,DelT,DelvT,DelaT,DelAX,DelAY,DelAZ,DelVX,DelVY,DelVZ"
-#define IMT_FMT    "Qfffffffff"
-#define IMT_UNITS  "ssssrrrnnn"
-#define IMT_MULTS  "FF00000000"
 
 #define ISBH_LABELS "TimeUS,N,type,instance,mul,smp_cnt,SampleUS,smp_rate"
 #define ISBH_FMT    "QHBBHHQf"
