@@ -422,6 +422,9 @@ private:
     double avg_xtrack_straight_total = 0.0f;
     float xtrack_straight_max = 0.0f;
     unsigned long avg_xtrack_straight_count = 0;
+    double avg_xtrack_wp_total = 0.0f;
+    float xtrack_wp_max = 0.0f;
+    unsigned long avg_xtrack_wp_count = 0;
     float _slow_limit = 9999.0f;
 
 

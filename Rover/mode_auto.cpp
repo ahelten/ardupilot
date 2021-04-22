@@ -32,6 +32,9 @@ bool ModeAuto::_enter()
     rover.avg_xtrack_corner_count = 0;
     rover.avg_xtrack_straight_total = 0.0f;
     rover.avg_xtrack_straight_count = 0;
+    rover.avg_xtrack_wp_count = 0;
+    rover.avg_xtrack_wp_total = 0;
+    rover.xtrack_wp_max = 0;
     rover.xtrack_corner_max = 0;
     rover.xtrack_straight_max = 0;
 
@@ -73,6 +76,12 @@ void ModeAuto::update()
                   rover.avg_xtrack_straight_total += fabs(rover.g2.wp_nav.crosstrack_error());
                   rover.avg_xtrack_straight_count++;
                   rover.xtrack_straight_max = fabs(rover.g2.wp_nav.crosstrack_error()) > rover.xtrack_straight_max ? fabs(rover.g2.wp_nav.crosstrack_error()):rover.xtrack_straight_max;
+                }
+
+                ++rover.avg_xtrack_wp_count;
+                rover.avg_xtrack_wp_total += fabs(rover.g2.wp_nav.crosstrack_error());
+                if (fabs(rover.g2.wp_nav.crosstrack_error()) > rover.xtrack_wp_max) {
+                    rover.xtrack_wp_max = fabs(rover.g2.wp_nav.crosstrack_error());
                 }
 
             } else {
@@ -686,6 +695,15 @@ bool ModeAuto::verify_nav_wp(const AP_Mission::Mission_Command& cmd)
         } else {
             // send simpler message to GCS
             gcs().send_text(MAV_SEVERITY_INFO, "Reached waypoint #%u", (unsigned int)cmd.index);
+
+            if (rover.avg_xtrack_wp_count > 0) {
+                gcs().send_text(MAV_SEVERITY_INFO,"Avg xtrk wp: %.4f, Max: %.4f, Num: %lu",
+                                rover.avg_xtrack_wp_total / rover.avg_xtrack_wp_count,
+                                rover.xtrack_wp_max, rover.avg_xtrack_wp_count);
+                rover.avg_xtrack_wp_count = 0;
+                rover.avg_xtrack_wp_total = 0;
+                rover.xtrack_wp_max = 0;
+            }
         }
     }
 
