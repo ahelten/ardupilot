@@ -331,12 +331,14 @@ void NavEKF3_core::setAidingMode()
                 rngBcnTimeout = true;
                 tasTimeout = true;
                 gpsNotAvailable = true;
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "EKF3 Attitude Loss Critical!!!");
              } else if (posAidLossCritical) {
                 // if the loss of position is critical, declare all sources of position aiding as being timed out
                 posTimeout = true;
                 velTimeout = !optFlowUsed && !gpsVelUsed && !bodyOdmUsed;
                 rngBcnTimeout = true;
                 gpsNotAvailable = true;
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "EKF3 Position Loss Critical!!!");
 
             }
             break;
