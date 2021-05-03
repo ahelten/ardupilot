@@ -698,7 +698,7 @@ private:
     uint16_t        _delay_time;
     uint8_t         _next_message;
     uint8_t         _ublox_port;
-    bool            _have_version;
+    bool            _have_version = false;
     struct ubx_mon_ver _version;
     uint32_t        _unconfigured_messages;
     uint8_t         _hardware_generation;
@@ -755,6 +755,10 @@ private:
     // see if we should use uart2 for moving baseline config
     bool mb_use_uart2(void) const {
         return (driver_options() & DriverOptions::UBX_MBUseUart2)?true:false;
+    }
+    // disable forwarding RTCM3 to the Rover (when using ArduSimple LITE "stack")
+    bool mb_disable_rtcm3(void) const {
+        return (driver_options() & DriverOptions::UBX_DisableRtcm3)?true:false;
     }
 #endif
 

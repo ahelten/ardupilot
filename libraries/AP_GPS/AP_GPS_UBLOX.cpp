@@ -81,15 +81,21 @@ AP_GPS_UBLOX::AP_GPS_UBLOX(AP_GPS &_gps, AP_GPS::GPS_State &_state, AP_HAL::UART
 
 #if GPS_MOVING_BASELINE
     if (role == AP_GPS::GPS_ROLE_MB_BASE && !mb_use_uart2()) {
-        rtcm3_parser = new RTCM3_Parser;
-        if (rtcm3_parser == nullptr) {
-            GCS_SEND_TEXT(MAV_SEVERITY_ERROR, "u-blox %d: failed RTCMv3 parser allocation", state.instance + 1);
+        if (!mb_disable_rtcm3()) {
+            rtcm3_parser = new RTCM3_Parser;
+            if (rtcm3_parser == nullptr) {
+                GCS_SEND_TEXT(MAV_SEVERITY_ERROR, "u-blox %d: failed RTCMv3 parser allocation", state.instance + 1);
+            }
+        } else {
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "u-blox %d: RTCMv3 forwarding disabled", state.instance + 1);
         }
         _unconfigured_messages |= CONFIG_RTK_MOVBASE;
+        GCS_SEND_TEXT(MAV_SEVERITY_ERROR, "u-blox %d: GPS Yaw MovingBaseline-Base configured", state.instance + 1);
     }
     if (role == AP_GPS::GPS_ROLE_MB_ROVER) {
         _unconfigured_messages |= CONFIG_RTK_MOVBASE;
         state.gps_yaw_configured = true;
+        GCS_SEND_TEXT(MAV_SEVERITY_ERROR, "u-blox %d: GPS Yaw MovingBaseline-Rover configured", state.instance + 1);
     }
 #endif
 }
@@ -539,28 +545,43 @@ AP_GPS_UBLOX::read(void)
     bool parsed = false;
     uint32_t millis_now = AP_HAL::millis();
 
-    // walk through the gps configuration at 1 message per second
-    if (millis_now - _last_config_time >= _delay_time) {
-        _request_next_config();
-        _last_config_time = millis_now;
-        if (_unconfigured_messages) { // send the updates faster until fully configured
-            if (!havePvtMsg && (_unconfigured_messages & CONFIG_REQUIRED_INITIAL)) {
-                _delay_time = 300;
-            } else {
-                _delay_time = 750;
+    if (gps._auto_config == AP_GPS::GPS_AUTO_CONFIG_DISABLE) {
+        // We don't configure the GPS but still need VERSION to check for F9P support
+        if(!_have_version && !hal.util->get_soft_armed() && (millis_now - _last_config_time >= 2000)) {
+            _request_next_config();
+            _last_config_time = millis_now;
+            if ((millis_now - _last_cfg_sent_time) >= 60000) {
+                // @amh Only print this every 60 seconds as a reminder to fix this issue
+                GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Requesting Version for GPS %d",
+                              state.instance + 1);
+                _last_cfg_sent_time = millis_now;
             }
-        } else {
-            _delay_time = 2000;
+            _request_version();
         }
-    }
+    } else {
+        // walk through the gps configuration at 1 message per second
+        if (millis_now - _last_config_time >= _delay_time) {
+            _request_next_config();
+            _last_config_time = millis_now;
+            if (_unconfigured_messages) { // send the updates faster until fully configured
+                if (!havePvtMsg && (_unconfigured_messages & CONFIG_REQUIRED_INITIAL)) {
+                    _delay_time = 300;
+                } else {
+                    _delay_time = 750;
+                }
+            } else {
+                _delay_time = 2000;
+            }
+        }
 
-    if(!_unconfigured_messages && gps._save_config && !_cfg_saved &&
-       _num_cfg_save_tries < 5 && (millis_now - _last_cfg_sent_time) > 5000 &&
-       !hal.util->get_soft_armed()) {
-        //save the configuration sent until now
-        if (gps._save_config == 1 ||
-            (gps._save_config == 2 && _cfg_needs_save)) {
-            _save_cfg();
+        if(!_unconfigured_messages && gps._save_config && !_cfg_saved &&
+           _num_cfg_save_tries < 5 && (millis_now - _last_cfg_sent_time) > 5000 &&
+           !hal.util->get_soft_armed()) {
+            //save the configuration sent until now
+            if (gps._save_config == 1 ||
+                (gps._save_config == 2 && _cfg_needs_save)) {
+                _save_cfg();
+            }
         }
     }
 
@@ -1378,8 +1399,18 @@ AP_GPS_UBLOX::_parse_gps(void)
                                           _buffer.relposned.relPosLength * 0.01,
                                           _buffer.relposned.relPosD*0.01)) {
                 state.gps_yaw_accuracy = _buffer.relposned.accHeading * 1e-5;
+                if (!state.have_gps_yaw_accuracy) {
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Reacquired GPS Yaw (%#x, %#x, %#x)",
+                                  (unsigned)_buffer.relposned.flags, (unsigned)valid_mask,
+                                  (unsigned)invalid_mask);
+                }
                 state.have_gps_yaw_accuracy = true;
             } else {
+                if (state.have_gps_yaw_accuracy) {
+                    GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "Lost GPS Yaw (%#x, %#x, %#x)",
+                                  (unsigned)_buffer.relposned.flags, (unsigned)valid_mask,
+                                  (unsigned)invalid_mask);
+                }
                 state.have_gps_yaw_accuracy = false;
             }
         }
@@ -1954,7 +1985,7 @@ bool AP_GPS_UBLOX::is_healthy(void) const
         // need F9 or above for moving baseline
         return false;
     }
-    if (role == AP_GPS::GPS_ROLE_MB_BASE && rtcm3_parser == nullptr && !mb_use_uart2()) {
+    if (role == AP_GPS::GPS_ROLE_MB_BASE && rtcm3_parser == nullptr && !mb_use_uart2() && !mb_disable_rtcm3()) {
         // we haven't initialised RTCMv3 parser
         return false;
     }

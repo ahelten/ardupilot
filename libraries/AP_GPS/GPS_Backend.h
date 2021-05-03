@@ -119,6 +119,7 @@ protected:
     enum DriverOptions : int16_t {
         UBX_MBUseUart2    = (1 << 0U),
         SBF_UseBaseForYaw = (1 << 1U),
+        UBX_DisableRtcm3  = (1 << 2U), // Disable processing/forwarding of RTCM3 messages
     };
 
     /*
