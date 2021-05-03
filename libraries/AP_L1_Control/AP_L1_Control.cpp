@@ -38,6 +38,16 @@ const AP_Param::GroupInfo AP_L1_Control::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO_FRAME("LIM_BANK",   3, AP_L1_Control, _loiter_bank_limit, 0.0f, AP_PARAM_FRAME_PLANE),
 
+#if defined(INCLUDE_AMH_EXPERIMENTAL_L1_CHANGES)
+    // @Param: NU2_DAMP
+    // @DisplayName: L1 control Nu2 damping value: (Nu2*_L1_nu2_damping)
+    // @Description: Noisy and/or skewed Nu2 causes relatively large (several centimeters) and relatively long-term (several meters) navigation offsets. Damping Nu2 reduces the lenght and severity of these offsets.
+    // @Range: 0 1.0
+    // @Increment: 0.001
+    // @User: Advanced
+    AP_GROUPINFO("NU2_DAMP",   4, AP_L1_Control, _L1_nu2_damping, 1.0),
+#endif
+
     AP_GROUPEND
 };
 
@@ -209,11 +219,20 @@ void AP_L1_Control::update_waypoint(const struct Location &prev_WP, const struct
         // controller hasn't been called for an extended period of
         // time.  Reinitialise it.
         _L1_xtrack_i = 0.0f;
+#if defined(INCLUDE_AMH_EXPERIMENTAL_L1_CHANGES)
+        _L1_nu2_damp_countdown_s = 1.0;
+#endif
     }
     if (dt > 0.1) {
         dt = 0.1;
     }
     _last_update_waypoint_us = now;
+
+#if defined(INCLUDE_AMH_EXPERIMENTAL_L1_CHANGES)
+    if (_L1_nu2_damp_countdown_s >= 0.0f) {
+        _L1_nu2_damp_countdown_s -= dt;
+    }
+#endif
 
     // Calculate L1 gain required for specified damping
     float K_L1 = 4.0f * _L1_damping * _L1_damping;
@@ -269,6 +288,8 @@ void AP_L1_Control::update_waypoint(const struct Location &prev_WP, const struct
     //Otherwise do normal L1 guidance
     float WP_A_dist = A_air.length();
     float alongTrackDist = A_air * AB;
+    float Nu1 = 0;
+    float Nu2 = 0;
     if (WP_A_dist > _L1_dist && alongTrackDist/MAX(WP_A_dist, 1.0f) < -0.7071f)
     {
         //Calc Nu to fly To WP A
@@ -291,12 +312,12 @@ void AP_L1_Control::update_waypoint(const struct Location &prev_WP, const struct
         //Calculate Nu2 angle (angle of velocity vector relative to line connecting waypoints)
         xtrackVel = _groundspeed_vector % AB; // Velocity cross track
         ltrackVel = _groundspeed_vector * AB; // Velocity along track
-        float Nu2 = atan2f(xtrackVel,ltrackVel);
+        Nu2 = atan2f(xtrackVel,ltrackVel);
         //Calculate Nu1 angle (Angle to L1 reference point)
         float sine_Nu1 = _crosstrack_error/MAX(_L1_dist, 0.1f);
         //Limit sine of Nu1 to provide a controlled track capture angle of 45 deg
         sine_Nu1 = constrain_float(sine_Nu1, -0.7071f, 0.7071f);
-        float Nu1 = asinf(sine_Nu1);
+        Nu1 = asinf(sine_Nu1);
 
         // compute integral error component to converge to a crosstrack of zero when traveling
         // straight but reset it when disabled or if it changes. That allows for much easier
@@ -311,10 +332,22 @@ void AP_L1_Control::update_waypoint(const struct Location &prev_WP, const struct
             _L1_xtrack_i = constrain_float(_L1_xtrack_i, -0.1f, 0.1f);
         }
 
+
+#if defined(INCLUDE_AMH_EXPERIMENTAL_L1_CHANGES)
+        if (fabsf(Nu1) > radians(2)) {
+            _L1_nu2_damp_countdown_s = 0.75f;
+        }
+#endif
+
+#if defined(INCLUDE_RESET_INTEGRAL_ON_CROSS_TRACK)
+        if((_crosstrack_error > 0 && last_xtrack < 0) || (_crosstrack_error < 0 && last_xtrack > 0)){
+            _L1_xtrack_i = 0; // Reset 'I' component when we cross over the track
+        }
+        last_xtrack = _crosstrack_error;
+
         // to converge to zero we must push Nu1 harder
         Nu1 += _L1_xtrack_i;
-
-#ifdef INCLUDE_JO_HP_LOCATION_L1_CHANGES
+#elif defined(INCLUDE_JO_HP_LOCATION_L1_CHANGES)
         //JO: Reduce i term when crossing path
         if((_crosstrack_error > 0 && last_xtrack < 0) || (_crosstrack_error < 0 && last_xtrack > 0)){
             // to converge to zero we must push Nu1 harder
@@ -323,9 +356,43 @@ void AP_L1_Control::update_waypoint(const struct Location &prev_WP, const struct
             Nu1 += _L1_xtrack_i;
         }
         last_xtrack = _crosstrack_error;
+#else
+        // to converge to zero we must push Nu1 harder
+        Nu1 += _L1_xtrack_i;
 #endif
 
+
+#if defined(INCLUDE_AMH_EXPERIMENTAL_L1_CHANGES)
+        // Original version that appears to cause a sporadic but fairly large (multiple
+        // centimeters) and fairly long-term (several meters) navigation offset:
+        //    Nu = Nu1 + Nu2;
+        // This version improved on the navigation offset but made the 90 degree turns much
+        // more erratic and innacurate (wild overshoots until Nu1 became small enough):
+        //    Nu = (Nu1*2) + (Nu2/2);
+        // This version also improved on the navigation offset and, after some tuning, performs
+        // decently enough on 90 degree turns though recovery to track alignment sometimes has
+        // a few large oscillations. This might be fixed with more tuning but end row turns are
+        // not a concern at this time.
+        //    Nu = Nu1 + (Nu2/4);
+        // This version seemed to do better at 1m/s than something like Nu2/5 but needs more
+        // testing:
+        //    Nu = Nu1 + (Nu2/2);
+        //
+        if (_L1_nu2_damp_countdown_s < 0.0f) {
+            Nu = Nu1 + (Nu2 * _L1_nu2_damping);
+        } else {
+            Nu = Nu1 + Nu2; //(Nu2 * MIN(1.0f, _L1_nu2_damping * 2.0f));
+        }
+
+        if (fabsf(_L1_nu2_damping - _prev_L1_nu2_damping) > 0.001) {
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "L1 controller Nu2 damping set to: %.3f",
+                          _L1_nu2_damping.get());
+            _prev_L1_nu2_damping = _L1_nu2_damping;
+        }
+#else
         Nu = Nu1 + Nu2;
+#endif
+
         _nav_bearing = atan2f(AB.y, AB.x) + Nu1; // bearing (radians) from AC to L1 point
     }
 
@@ -346,6 +413,33 @@ void AP_L1_Control::update_waypoint(const struct Location &prev_WP, const struct
     _bearing_error = Nu; // bearing error angle (radians), +ve to left of track
 
     _data_is_stale = false; // status are correctly updated with current waypoint data
+
+#if defined(INCLUDE_AMH_EXPERIMENTAL_L1_CHANGES)
+    static unsigned count = 0;
+    if ((++count % 5) == 1) {
+        auto now64 = AP_HAL::micros64();
+        AP::logger().Write("L1CA",
+                           "TimeUS,Nu1,Nu2,Nu,Nu2_cntdwn_s,gspd_x,gspd_y,gspd,xtrkV,ltrkV",
+                           "srrrsnnnnn",
+                           "----------",
+                           "Qfffffffff",
+                           now64, Nu1, Nu2, Nu, _L1_nu2_damp_countdown_s, _groundspeed_vector.x,
+                           _groundspeed_vector.y, groundSpeed, xtrackVel, ltrackVel);
+        AP::logger().Write("L1CB",
+                           "TimeUS,lat_acc,xtrk_err,xtrk_i,yaw,yaw_err,tgt_brg,AB_x,AB_y",
+                           "snmrrrrmm",
+                           "---------",
+                           "Qfffffiff",
+                           now64, _latAccDem, _crosstrack_error, _L1_xtrack_i,
+                           _ahrs.get_yaw(), _ahrs.get_error_yaw(), _target_bearing_cd, AB.x, AB.y);
+        AP::logger().Write("L1CC",
+                           "TimeUS,dt,WPAdist,L1_dist,K_L1,alongTrkDist,nav_brg",
+                           "ssmm-mr",
+                           "-------",
+                           "Qffffff",
+                           now64, dt, WP_A_dist, _L1_dist, K_L1, alongTrackDist, _nav_bearing);
+    }
+#endif
 }
 
 // update L1 control for loitering
