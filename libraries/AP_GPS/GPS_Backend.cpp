@@ -324,7 +324,7 @@ bool AP_GPS_Backend::calculate_moving_base_yaw(const float reported_heading_deg,
         // invalid type, let's throw up a flag
         INTERNAL_ERROR(AP_InternalError::error_t::flow_of_control);
         GCS_SEND_TEXT(MAV_SEVERITY_INFO,
-                      "Invalid MovingBaseType=%d", gps.mb_params[state.instance].type.get());
+                      "Invalid MovingBase Type: %d", gps.mb_params[state.instance].type.get());
         goto bad_yaw;
     }
 
@@ -346,7 +346,7 @@ bool AP_GPS_Backend::calculate_moving_base_yaw(const float reported_heading_deg,
             Debug("Reported baseline distance (%f) was less then the minimum antenna seperation (%f)",
                   (double)reported_distance, (double)minimum_antenna_seperation);
             GCS_SEND_TEXT(MAV_SEVERITY_INFO,
-                          "Reported baseline distance (%f) was less then the minimum antenna seperation (%f)",
+                          "Reported baseline distance (%f) less than min antenna seperation (%f)",
                           (double)reported_distance, (double)minimum_antenna_seperation);
             goto bad_yaw;
         }
@@ -354,10 +354,10 @@ bool AP_GPS_Backend::calculate_moving_base_yaw(const float reported_heading_deg,
 
         if ((offset_dist - reported_distance) > (min_dist * permitted_error_length_pct)) {
             // the magnitude of the vector is much further then we were expecting
-            Debug("Exceeded permitted error margin %f > %f",
+            Debug("Exceeded the permitted error margin %f > %f",
                   (double)(offset_dist - reported_distance), (double)(min_dist * permitted_error_length_pct));
             GCS_SEND_TEXT(MAV_SEVERITY_INFO,
-                          "Exceeded error margin %.5f > %.5f",
+                          "Exceeded permitted error margin %.3f > %.3f",
                           (double)(offset_dist - reported_distance),
                           (double)(min_dist * permitted_error_length_pct));
             goto bad_yaw;
@@ -370,7 +370,7 @@ bool AP_GPS_Backend::calculate_moving_base_yaw(const float reported_heading_deg,
             if (fabsf(alt_error) > permitted_error_length_pct * min_dist) {
                 // the vertical component is out of range, reject it
                 GCS_SEND_TEXT(MAV_SEVERITY_INFO,
-                              "H range: %f > %f (%4.2f,%4.2f,%4.2f)",
+                              "Vertical range: %.3f > %.3f (%4.2f,%4.2f,%4.2f)",
                               fabsf(alt_error), permitted_error_length_pct * min_dist,
                               (double)offset.x, (double)offset.y, (double)offset.z);
                 goto bad_yaw;
