@@ -650,6 +650,7 @@ void NavEKF3_core::readGpsData()
             }
 
             // Read the GPS location in WGS-84 lat,long,height coordinates
+            // @amh: make sure this path supports hpposllh!
             const struct Location &gpsloc = gps.location(selected_gps);
 
             // Set the EKF origin and magnetic field declination if not previously set and GPS checks have passed
@@ -697,12 +698,12 @@ void NavEKF3_core::readGpsData()
 
             // if the GPS has yaw data then input that as well
             float yaw_deg, yaw_accuracy_deg;
-            if (dal.gps().gps_yaw_deg(selected_gps, yaw_deg, yaw_accuracy_deg)) {
+            if (dal.gps().gps_yaw_deg(selected_yaw_gps, yaw_deg, yaw_accuracy_deg)) {
                 // GPS modules are rather too optimistic about their
                 // accuracy. Set to min of 5 degrees here to prevent
                 // the user constantly receiving warnings about high
                 // normalised yaw innovations
-                const float min_yaw_accuracy_deg = 5.0f;
+                const float min_yaw_accuracy_deg = 5.0f; //0.9f;
                 yaw_accuracy_deg = MAX(yaw_accuracy_deg, min_yaw_accuracy_deg);
                 writeEulerYawAngle(radians(yaw_deg), radians(yaw_accuracy_deg), gpsDataNew.time_ms, 2);
             }
@@ -1093,6 +1094,19 @@ void NavEKF3_core::update_gps_selection(void)
 {
     const auto &gps = dal.gps();
 
+    if (default_yaw_gps < 0) {
+       for (unsigned i=0; i < AP::gps().num_sensors(); ++i) {
+            if (AP::gps().get_type(i) == AP_GPS::GPS_TYPE_UBLOX_RTK_ROVER) {
+                default_yaw_gps = i;
+                break;
+            }
+       }
+       if (default_yaw_gps >= 0) {
+           GCS_SEND_TEXT(MAV_SEVERITY_INFO, "IMU%u default GPS Yaw device: GPS %d", imu_index,
+                         default_yaw_gps + 1);
+       }
+    }
+
     // in normal operation use the primary GPS
     selected_gps = gps.primary_sensor();
     preferred_gps = selected_gps;
@@ -1108,6 +1122,34 @@ void NavEKF3_core::update_gps_selection(void)
             // use the primary GPS
             selected_gps = preferred_gps;
         }
+    }
+
+    const uint8_t prev_yaw_gps = selected_yaw_gps;
+    if (AP::gps().get_type(selected_gps) == AP_GPS::GPS_TYPE_UBLOX_RTK_ROVER) {
+        selected_yaw_gps = selected_gps;
+    } else if (   (default_yaw_gps >= 0)
+               && (AP::gps().status(default_yaw_gps) >= AP::gps().status(selected_gps))) {
+        // The question here is whether GPS status should be considered if we have a
+        // UBLOX_RTK_ROVER setup. In other words, is the GPS yaw provided by UBLOX_RTK_ROVER
+        // is *always better* than "heading of motion" (which is actually pretty bad)? If it is
+        // always better, then instead of comparing GPS status between 'yaw' and 'selected', we
+        // would simply always use 'default' when it exists (note: 'default' is only set when we
+        // are using UBLOX_RTK_ROVER).
+        selected_yaw_gps = default_yaw_gps;
+    } else {
+        selected_yaw_gps = selected_gps;
+    }
+
+    // If there was a change in selected yaw gps and the result is not MovingBaseline-Rover,
+    // complain about it
+    if (   (prev_yaw_gps != selected_yaw_gps)
+        && frontend->sources.gps_yaw_enabled()
+        && (default_yaw_gps >= 0)
+        && (AP::gps().get_type(default_yaw_gps) == AP_GPS::GPS_TYPE_UBLOX_RTK_ROVER)
+        && (AP::gps().get_type(selected_yaw_gps) != AP_GPS::GPS_TYPE_UBLOX_RTK_ROVER))
+    {
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "MovingBaseline-Rover (GPS %u) is not yaw source!",
+                      default_yaw_gps);
     }
 }
 

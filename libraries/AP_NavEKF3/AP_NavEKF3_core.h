@@ -1473,6 +1473,8 @@ private:
     uint8_t preferred_gps;
     uint8_t selected_baro;
     uint8_t selected_airspeed;
+    uint8_t selected_yaw_gps = 0;
+    int8_t default_yaw_gps = -1;
 
     // source reset handling
     AP_NavEKF_Source::SourceXY posxy_source_last;   // horizontal position source on previous iteration (used to detect a changes)
