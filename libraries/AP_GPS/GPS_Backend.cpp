@@ -336,7 +336,7 @@ bool AP_GPS_Backend::calculate_moving_base_yaw(const float reported_heading_deg,
             // offsets have to be sufficently large to get a meaningful angle off of them
             Debug("Insufficent antenna offset (%f, %f, %f)", (double)offset.x, (double)offset.y, (double)offset.z);
             GCS_SEND_TEXT(MAV_SEVERITY_INFO,
-                          "Insufficent antenna offset (%f, %f, %f)", (double)offset.x,
+                          "Insufficent antenna offset (%.3f, %.3f, %.3f)", (double)offset.x,
                           (double)offset.y, (double)offset.z);
             goto bad_yaw;
         }
