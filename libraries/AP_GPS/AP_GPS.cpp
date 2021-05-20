@@ -1984,17 +1984,15 @@ void AP_GPS::Write_GPS(uint8_t i)
         status        : (uint8_t)status(i),
         gps_week_ms   : time_week_ms(i),
         gps_week      : time_week(i),
-        num_sats      : num_sats(i),
-        hdop          : get_hdop(i),
         latitude      : loc.lat,
         longitude     : loc.lng,
+        lat_hp        : loc.lat_hp,
+        lng_hp        : loc.lng_hp,
         altitude      : loc.alt,
         ground_speed  : ground_speed(i),
         ground_course : ground_course(i),
-        vel_z         : velocity(i).z,
         yaw           : yaw_deg,
-        used          : (uint8_t)(AP::gps().primary_sensor() == i),
-        lat_lng_hp    : (uint16_t)((loc.lat_hp << 8) | loc.lng_hp)
+        used          : (uint8_t)(AP::gps().primary_sensor() == i)
     };
     AP::logger().WriteBlock(&pkt, sizeof(pkt));
 
@@ -2007,14 +2005,17 @@ void AP_GPS::Write_GPS(uint8_t i)
         LOG_PACKET_HEADER_INIT(LOG_GPA_MSG),
         time_us       : time_us,
         instance      : i,
+        hdop          : get_hdop(i),
         vdop          : get_vdop(i),
         hacc          : (uint16_t)MIN((hacc*100), UINT16_MAX),
         vacc          : (uint16_t)MIN((vacc*100), UINT16_MAX),
         sacc          : (uint16_t)MIN((sacc*100), UINT16_MAX),
         yaw_accuracy  : yaw_accuracy_deg,
+        vel_z         : velocity(i).z,
         have_vv       : (uint8_t)have_vertical_velocity(i),
         sample_ms     : last_message_time_ms(i),
-        delta_ms      : last_message_delta_time_ms(i)
+        delta_ms      : last_message_delta_time_ms(i),
+        num_sats      : num_sats(i)
     };
     AP::logger().WriteBlock(&pkt2, sizeof(pkt2));
 }

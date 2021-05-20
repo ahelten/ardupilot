@@ -19,17 +19,15 @@
 // @Field: Status: GPS Fix type; 2D fix, 3D fix etc.
 // @Field: GMS: milliseconds since start of GPS Week
 // @Field: GWk: weeks since 5 Jan 1980
-// @Field: NSats: number of satellites visible
-// @Field: HDop: horizontal precision
 // @Field: Lat: latitude
 // @Field: Lng: longitude
+// @Field: LatHp: high-precision (1e-9) latitude
+// @Field: LngHp: high-precision (1e-9) longitude
 // @Field: Alt: altitude
 // @Field: Spd: ground speed
 // @Field: GCrs: ground course
-// @Field: VZ: vertical speed
 // @Field: Yaw: vehicle yaw
 // @Field: U: boolean value indicating whether this GPS is in use
-// @Field: lat_lng_hp: high byte contains high-precision latitude, lower byte contains high-precision longitude (both up to 1e-9)
 struct PACKED log_GPS {
     LOG_PACKET_HEADER;
     uint64_t time_us;
@@ -37,43 +35,47 @@ struct PACKED log_GPS {
     uint8_t  status;
     uint32_t gps_week_ms;
     uint16_t gps_week;
-    uint8_t  num_sats;
-    uint16_t hdop;
     int32_t  latitude;
     int32_t  longitude;
+    int8_t   lat_hp;
+    int8_t   lng_hp;
     int32_t  altitude;
     float    ground_speed;
     float    ground_course;
-    float    vel_z;
     float    yaw;
     uint8_t  used;
-    uint16_t lat_lng_hp;
 };
 
 // @LoggerMessage: GPA
 // @Description: GPS accuracy information
-// @Field: I: GPS instance number
 // @Field: TimeUS: Time since system startup
+// @Field: I: GPS instance number
+// @Field: HDop: horizontal precision
 // @Field: VDop: vertical degree of procession
 // @Field: HAcc: horizontal position accuracy
 // @Field: VAcc: vertical position accuracy
 // @Field: SAcc: speed accuracy
 // @Field: YAcc: yaw accuracy
+// @Field: VZ: vertical speed
 // @Field: VV: true if vertical velocity is available
 // @Field: SMS: time since system startup this sample was taken
 // @Field: Delta: system time delta between the last two reported positions
+// @Field: NSats: number of satellites visible
 struct PACKED log_GPA {
     LOG_PACKET_HEADER;
     uint64_t time_us;
     uint8_t  instance;
+    uint16_t hdop;
     uint16_t vdop;
     uint16_t hacc;
     uint16_t vacc;
     uint16_t sacc;
     float    yaw_accuracy;
+    float    vel_z;
     uint8_t  have_vv;
     uint32_t sample_ms;
     uint16_t delta_ms;
+    uint8_t  num_sats;
 };
 
 /*
@@ -198,9 +200,11 @@ struct PACKED log_GPS_RAWS {
 
 #define LOG_STRUCTURE_FROM_GPS \
     { LOG_GPS_MSG, sizeof(log_GPS), \
-      "GPS",  "QBBIHBcLLeffffBH", "TimeUS,I,Status,GMS,GWk,NSats,HDop,Lat,Lng,Alt,Spd,GCrs,VZ,Yaw,U,lat_lng_hp", "s#---SmDUmnhnh--", "F----0BGGB000---" }, \
+    /*"GPS",  "QBBIHBcLLeffffB", "TimeUS,I,Status,GMS,GWk,NSats,HDop,Lat,Lng,Alt,Spd,GCrs,VZ,Yaw,U", "s#---SmDUmnhnh-", "F----0BGGB000--" },*/ \
+      "GPS",  "QBBIHLLbbefffB", "TimeUS,I,Status,GMS,GWk,Lat,Lng,LatHp,LngHp,Alt,Spd,GCrs,Yaw,U", "s#---DU--mnhh-", "F----GG--B00--" }, \
     { LOG_GPA_MSG,  sizeof(log_GPA), \
-      "GPA",  "QBCCCCfBIH", "TimeUS,I,VDop,HAcc,VAcc,SAcc,YAcc,VV,SMS,Delta", "s#mmmnd-ss", "F-BBBB0-CC" }, \
+    /*"GPA",  "QBCCCCfBIH", "TimeUS,I,VDop,HAcc,VAcc,SAcc,YAcc,VV,SMS,Delta", "s#mmmnd-ss", "F-BBBB0-CC" },*/ \
+      "GPA",  "QBCCCCCffBIHB", "TimeUS,I,HDop,VDop,HAcc,VAcc,SAcc,YAcc,VZ,VV,SMS,Delta,NSats", "s#mmmmndn-ssS", "F-BBBBBB0-CC0" }, \
     { LOG_GPS_UBX1_MSG, sizeof(log_Ubx1), \
       "UBX1", "QBHBBHI",  "TimeUS,Instance,noisePerMS,jamInd,aPower,agcCnt,config", "s#-----", "F------"  }, \
     { LOG_GPS_UBX2_MSG, sizeof(log_Ubx2), \
