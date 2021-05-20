@@ -188,8 +188,7 @@ private:
     bool _have_gps_lock;
 
     // the lat/lng where we last had GPS lock
-    int32_t _last_lat;
-    int32_t _last_lng;
+    Location _last_pos;
 
     // position offset from last GPS lock
     float _position_offset_north;
