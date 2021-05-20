@@ -173,3 +173,12 @@ def git_submodule_head_hash(self, name, short=False):
 @conf
 def git_head_hash(self, short=False):
     return _git_head_hash(self, self.srcnode.abspath(), short=short)
+
+@conf
+def git_dirty_state(self):
+    cmd = [self.env.get_flat('GIT'), 'diff-index', 'HEAD']
+    out = self.cmd_and_log(cmd, quiet=Context.BOTH, cwd=self.srcnode.abspath())
+    if len(out.strip()) > 0:
+        return "-dirty"
+    else:
+        return ""

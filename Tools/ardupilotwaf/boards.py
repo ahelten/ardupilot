@@ -331,7 +331,8 @@ class Board:
             self.embed_ROMFS_files(bld)
 
     def build(self, bld):
-        bld.ap_version_append_str('GIT_VERSION', bld.git_head_hash(short=True))
+        bld.ap_version_append_str('GIT_VERSION',
+                bld.git_head_hash(short=True) + bld.git_dirty_state())
         import time
         ltime = time.localtime()
         if bld.env.build_dates:
