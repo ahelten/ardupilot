@@ -360,6 +360,8 @@ bool Location::sanitize(const Location &defaultLoc)
 assert_storage_size<Location, 20> _assert_storage_size_Location;
 
 // return bearing in centi-degrees from location to loc2
+// @amh: Should we update this to support lat_hp/lng_hp? Seems if loc2 is far enough away (how
+//       far?), it most likely will not change the bearing enough to matter.
 int32_t Location::get_bearing_to(const struct Location &loc2) const
 {
     const int32_t off_x = loc2.lng - lng;
@@ -376,7 +378,7 @@ int32_t Location::get_bearing_to(const struct Location &loc2) const
  */
 bool Location::same_latlon_as(const Location &loc2) const
 {
-    return (lat == loc2.lat) && (lng == loc2.lng);
+    return (lat == loc2.lat) && (lng == loc2.lng) && (lat_hp == loc2.lat_hp) & (lng_hp == loc2.lng_hp);
 }
 
 // return true when lat and lng are within range
