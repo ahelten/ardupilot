@@ -46,6 +46,7 @@
 #define MASK_LOG_STEERING       (1<<13)
 #define MASK_LOG_RC             (1<<14)
 // #define MASK_LOG_ARM_DISARM     (1<<15)
+#define MASK_LOG_L1             (1<<17)
 #define MASK_LOG_IMU_RAW        (1UL<<19)
 
 // for mavlink SET_POSITION_TARGET messages

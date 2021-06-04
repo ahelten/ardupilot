@@ -1,6 +1,8 @@
 #include <AP_HAL/AP_HAL.h>
 #include "AP_L1_Control.h"
 
+#define MASK_LOG_L1             (1<<17) // This is really defined in Rover/defines.h but hack it in here for now
+
 extern const AP_HAL::HAL& hal;
 
 // table of user settable parameters
@@ -415,29 +417,32 @@ void AP_L1_Control::update_waypoint(const struct Location &prev_WP, const struct
     _data_is_stale = false; // status are correctly updated with current waypoint data
 
 #if defined(INCLUDE_AMH_EXPERIMENTAL_L1_CHANGES)
-    static unsigned count = 0;
-    if ((++count % 5) == 1) {
-        auto now64 = AP_HAL::micros64();
-        AP::logger().Write("L1CA",
-                           "TimeUS,Nu1,Nu2,Nu,Nu2_cntdwn_s,gspd_x,gspd_y,gspd,xtrkV,ltrkV",
-                           "srrrsnnnnn",
-                           "----------",
-                           "Qfffffffff",
-                           now64, Nu1, Nu2, Nu, _L1_nu2_damp_countdown_s, _groundspeed_vector.x,
-                           _groundspeed_vector.y, groundSpeed, xtrackVel, ltrackVel);
-        AP::logger().Write("L1CB",
-                           "TimeUS,lat_acc,xtrk_err,xtrk_i,yaw,yaw_err,tgt_brg,AB_x,AB_y",
-                           "snmrrrrmm",
-                           "---------",
-                           "Qfffffiff",
-                           now64, _latAccDem, _crosstrack_error, _L1_xtrack_i,
-                           _ahrs.get_yaw(), _ahrs.get_error_yaw(), _target_bearing_cd, AB.x, AB.y);
-        AP::logger().Write("L1CC",
-                           "TimeUS,dt,WPAdist,L1_dist,K_L1,alongTrkDist,nav_brg",
-                           "ssmm-mr",
-                           "-------",
-                           "Qffffff",
-                           now64, dt, WP_A_dist, _L1_dist, K_L1, alongTrackDist, _nav_bearing);
+    if (AP::logger().should_log(MASK_LOG_L1)) {
+        static unsigned count = 0;
+        if ((++count % 5) == 1) {
+            auto now64 = AP_HAL::micros64();
+            AP::logger().Write("L1CA",
+                               "TimeUS,Nu1,Nu2,Nu,Nu2_cntdwn_s,gspd_x,gspd_y,gspd,xtrkV,ltrkV",
+                               "srrrsnnnnn",
+                               "----------",
+                               "Qfffffffff",
+                               now64, Nu1, Nu2, Nu, _L1_nu2_damp_countdown_s, _groundspeed_vector.x,
+                               _groundspeed_vector.y, groundSpeed, xtrackVel, ltrackVel);
+            AP::logger().Write("L1CB",
+                               "TimeUS,lat_acc,xtrk_err,xtrk_i,yaw,yaw_err,tgt_brg,AB_x,AB_y",
+                               "snmrrrrmm",
+                               "---------",
+                               "Qfffffiff",
+                               now64, _latAccDem, _crosstrack_error, _L1_xtrack_i,
+                               _ahrs.get_yaw(), _ahrs.get_error_yaw(), _target_bearing_cd, AB.x,
+                               AB.y);
+            AP::logger().Write("L1CC",
+                               "TimeUS,dt,WPAdist,L1_dist,K_L1,alongTrkDist,nav_brg",
+                               "ssmm-mr",
+                               "-------",
+                               "Qffffff",
+                               now64, dt, WP_A_dist, _L1_dist, K_L1, alongTrackDist, _nav_bearing);
+        }
     }
 #endif
 }
