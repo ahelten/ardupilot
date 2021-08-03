@@ -24,6 +24,8 @@
 #include <AP_MSP/msp.h>
 #include <AP_ExternalAHRS/AP_ExternalAHRS.h>
 
+#define INCLUDE_AMH_GPS_CHANGES
+
 /**
    maximum number of GPS instances available on this platform. If more
    than 1 then redundant sensors may be available
@@ -327,6 +329,30 @@ public:
         return ground_course_cd(primary_instance);
     }
 
+#ifdef INCLUDE_AMH_GPS_CHANGES
+    // yaw in degrees if available
+    //
+    // @amh: The overall design here is too inconsistent to fix properly but if you happen to
+    // be using Ublox (we are) then you can see that 'have_gps_yaw_accuracy' is set false when
+    // the Ublox device itself determines it has no GPS yaw (even though it is configured for
+    // it and is receiving RELPOSNED). The original version of this function returned a
+    // hard-coded accuracy of 10 degrees but otherwise considered the yaw to be "accurate" even
+    // when the underlying GPS device considered it be 100% invalid. The new version of this
+    // function returns false if 'have_gps_yaw_accuracy' is false instead of faking the
+    // accuracy.
+    //
+    bool gps_yaw_deg(uint8_t instance, float &yaw_deg, float &accuracy_deg) const {
+        if (!have_gps_yaw(instance)) {
+            return false;
+        }
+        else if (!state[instance].have_gps_yaw_accuracy) {
+            return false;
+        }
+        yaw_deg = state[instance].gps_yaw;
+        accuracy_deg = state[instance].gps_yaw_accuracy;
+        return true;
+    }
+#else
     // yaw in degrees if available
     bool gps_yaw_deg(uint8_t instance, float &yaw_deg, float &accuracy_deg) const {
         if (!have_gps_yaw(instance)) {
@@ -341,6 +367,7 @@ public:
         }
         return true;
     }
+#endif
     bool gps_yaw_deg(float &yaw_deg, float &accuracy_deg) const {
         return gps_yaw_deg(primary_instance, yaw_deg, accuracy_deg);
     }
