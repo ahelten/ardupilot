@@ -1438,6 +1438,10 @@ AP_InertialSensor::_init_gyro()
     hal.console->printf("\n");
     for (uint8_t k=0; k<num_gyros; k++) {
         if (!converged[k]) {
+            gcs().send_text(MAV_SEVERITY_ERROR,
+                            "gyro[%u] calibration did not converge: diff=%f dps (expected < %f)",
+                            (unsigned)k, (double)ToDeg(best_diff[k]),
+                            (double)GYRO_INIT_MAX_DIFF_DPS);
             hal.console->printf("gyro[%u] did not converge: diff=%f dps (expected < %f)\n",
                                 (unsigned)k,
                                 (double)ToDeg(best_diff[k]),
@@ -1462,6 +1466,8 @@ AP_InertialSensor::_init_gyro()
 
     // stop flashing leds
     AP_Notify::flags.initialising = false;
+
+    gcs().send_text(MAV_SEVERITY_INFO, "Gyro calibration complete");
 }
 
 // save parameters to eeprom
