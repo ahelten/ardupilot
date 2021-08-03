@@ -1149,7 +1149,7 @@ void NavEKF3_core::update_gps_selection(void)
         && (AP::gps().get_type(selected_yaw_gps) != AP_GPS::GPS_TYPE_UBLOX_RTK_ROVER))
     {
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "MovingBaseline-Rover (GPS %u) is not yaw source!",
-                      default_yaw_gps);
+                      default_yaw_gps + 1);
     }
 }
 
