@@ -1587,7 +1587,7 @@ AP_GPS_UBLOX::_parse_gps(void)
         if (AP_HAL::millis() - _last_relposned_ms > 400) {
             // we have stopped receiving valid RELPOSNED messages, disable yaw reporting
             state.have_gps_yaw = false;
-        } else if (_last_relposned_itow != _last_pos_time) {
+        } else if (_last_relposned_itow != _last_pvt_itow) {
             // wait until ITOW matches
             return false;
         }
