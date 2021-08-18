@@ -4,6 +4,8 @@
 script to build the latest binaries for each vehicle type, ready to upload
 Peter Barker, August 2017
 based on build_binaries.sh by Andrew Tridgell, March 2013
+
+AP_FLAKE8_CLEAN
 """
 
 from __future__ import print_function
@@ -20,7 +22,8 @@ import sys
 import gzip
 
 # local imports
-import generate_manifest, gen_stable
+import generate_manifest
+import gen_stable
 import build_binaries_history
 
 if sys.version_info[0] < 3:
@@ -274,9 +277,9 @@ is bob we will attempt to checkout bob-AVR'''
         if not os.path.exists(versionfile):
             self.progress("%s does not exist" % (versionfile,))
             return
-        ss = ".*define +FIRMWARE_VERSION[	 ]+(?P<major>\d+)[ ]*,[ 	]*" \
-             "(?P<minor>\d+)[ ]*,[	 ]*(?P<point>\d+)[ ]*,[	 ]*" \
-             "(?P<type>[A-Z_]+)[	 ]*"
+        ss = r".*define +FIRMWARE_VERSION[	 ]+(?P<major>\d+)[ ]*,[ 	]*" \
+             r"(?P<minor>\d+)[ ]*,[	 ]*(?P<point>\d+)[ ]*,[	 ]*" \
+             r"(?P<type>[A-Z_]+)[	 ]*"
         content = self.read_string_from_filepath(versionfile)
         match = re.search(ss, content)
         if match is None:
@@ -562,6 +565,7 @@ is bob we will attempt to checkout bob-AVR'''
                 "fmuv5",
                 "mindpx-v2",
                 "erlebrain2",
+                "navigator",
                 "navio",
                 "navio2",
                 "edge",
@@ -570,6 +574,7 @@ is bob we will attempt to checkout bob-AVR'''
                 "KakuteF4",
                 "KakuteF7",
                 "KakuteF7Mini",
+                "KakuteF4Mini",
                 "MambaF405v2",
                 "MatekF405",
                 "MatekF405-bdshot",
@@ -590,6 +595,9 @@ is bob we will attempt to checkout bob-AVR'''
                 "mini-pix",
                 "airbotf4",
                 "revo-mini",
+                "revo-mini-bdshot",
+                "revo-mini-i2c",
+                "revo-mini-i2c-bdshot",
                 "CubeBlack",
                 "CubeBlack+",
                 "CubePurple",
@@ -613,6 +621,9 @@ is bob we will attempt to checkout bob-AVR'''
                 "mRoPixracerPro",
                 "mRoPixracerPro-bdshot",
                 "mRoControlZeroOEMH7",
+                "mRoControlZeroClassic",
+                "mRoControlZeroH7",
+                "mRoControlZeroH7-bdshot",
                 "F35Lightning",
                 "speedybeef4",
                 "SuccexF4",
@@ -633,6 +644,7 @@ is bob we will attempt to checkout bob-AVR'''
                 "BeastH7",
                 "BeastF7",
                 "FlywooF745",
+                "luminousbee5",
                 # SITL targets
                 "SITL_x86_64_linux_gnu",
                 "SITL_arm_linux_gnueabihf",
@@ -656,6 +668,8 @@ is bob we will attempt to checkout bob-AVR'''
                 "CubeBlack-periph",
                 "MatekH743-periph",
                 "HitecMosaic",
+                "FreeflyRTK",
+                "HolybroGPS",
                 ]
 
     def build_arducopter(self, tag):
@@ -721,7 +735,6 @@ is bob we will attempt to checkout bob-AVR'''
                            "AP_Periph",
                            "AP_Periph")
 
-
     def generate_manifest(self):
         '''generate manigest files for GCS to download'''
         self.progress("Generating manifest")
@@ -748,7 +761,6 @@ is bob we will attempt to checkout bob-AVR'''
         self.progress("Generating stable releases")
         gen_stable.make_all_stable(self.binaries)
         self.progress("Generate stable releases done")
-
 
     def validate(self):
         '''run pre-run validation checks'''

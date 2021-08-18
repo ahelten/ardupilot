@@ -46,6 +46,9 @@ class AutoTestQuadPlane(AutoTest):
     def get_normal_armable_modes_list():
         return []
 
+    def vehicleinfo_key(self):
+        return 'ArduPlane'
+
     def default_frame(self):
         return "quadplane"
 
@@ -54,6 +57,10 @@ class AutoTestQuadPlane(AutoTest):
 
     def sitl_start_location(self):
         return SITL_START_LOCATION
+
+    def default_speedup(self):
+        '''QuadPlane seems to be race-free'''
+        return 100
 
     def log_name(self):
         return "QuadPlane"
@@ -67,7 +74,7 @@ class AutoTestQuadPlane(AutoTest):
         pass
 
     def defaults_filepath(self):
-        return self.model_defaults_filepath("ArduPlane", self.frame)
+        return self.model_defaults_filepath(self.frame)
 
     def is_plane(self):
         return True
@@ -585,10 +592,10 @@ class AutoTestQuadPlane(AutoTest):
 
     def disabled_tests(self):
         return {
-            "QAutoTune": "See https://github.com/ArduPilot/ardupilot/issues/10411",
             "FRSkyPassThrough": "Currently failing",
             "CPUFailsafe": "servo channel values not scaled like ArduPlane",
             "GyroFFT": "flapping test",
+            "ConfigErrorLoop": "failing because RC values not settable",
         }
 
     def test_pilot_yaw(self):

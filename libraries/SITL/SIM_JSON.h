@@ -68,6 +68,7 @@ private:
         DATA_FLOAT,
         DATA_DOUBLE,
         DATA_VECTOR3F,
+        DATA_VECTOR3D,
         QUATERNION,
     };
 
@@ -77,7 +78,7 @@ private:
             Vector3f gyro;
             Vector3f accel_body;
         } imu;
-        Vector3f position;
+        Vector3d position;
         Vector3f attitude;
         Quaternion quaternion;
         Vector3f velocity;
@@ -86,6 +87,7 @@ private:
             float direction;
             float speed;
         } wind_vane_apparent;
+        float airspeed;
     } state;
 
     // table to aid parsing of JSON sensor data
@@ -95,11 +97,11 @@ private:
         void *ptr;
         enum data_type type;
         bool required;
-    } keytable[15] = {
+    } keytable[16] = {
         { "", "timestamp", &state.timestamp_s, DATA_DOUBLE, true },
         { "imu", "gyro",    &state.imu.gyro, DATA_VECTOR3F, true },
         { "imu", "accel_body", &state.imu.accel_body, DATA_VECTOR3F, true },
-        { "", "position", &state.position, DATA_VECTOR3F, true },
+        { "", "position", &state.position, DATA_VECTOR3D, true },
         { "", "attitude", &state.attitude, DATA_VECTOR3F, false },
         { "", "quaternion", &state.quaternion, QUATERNION, false },
         { "", "velocity", &state.velocity, DATA_VECTOR3F, true },
@@ -111,6 +113,7 @@ private:
         { "", "rng_6", &state.rng[5], DATA_FLOAT, false },
         {"windvane","direction", &state.wind_vane_apparent.direction, DATA_FLOAT, false},
         {"windvane","speed", &state.wind_vane_apparent.speed, DATA_FLOAT, false},
+        {"", "airspeed", &state.airspeed, DATA_FLOAT, false},
     };
 
     // Enum coresponding to the ordering of keys in the keytable.
@@ -130,6 +133,7 @@ private:
         RNG_6       = 1U << 12,
         WIND_DIR    = 1U << 13,
         WIND_SPD    = 1U << 14,
+        AIRSPEED    = 1U << 15,
     };
     uint16_t last_received_bitmask;
 };

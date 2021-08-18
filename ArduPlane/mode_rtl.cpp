@@ -4,8 +4,9 @@
 bool ModeRTL::_enter()
 {
     plane.prev_WP_loc = plane.current_loc;
-    plane.do_RTL(plane.get_RTL_altitude());
+    plane.do_RTL(plane.get_RTL_altitude_cm());
     plane.rtl.done_climb = false;
+    plane.vtol_approach_s.approach_stage = Plane::Landing_ApproachStage::RTL;
 
     // do not check if we have reached the loiter target if switching from loiter this will trigger as the nav controller has not yet proceeded the new destination
     switch_QRTL(false);
@@ -49,9 +50,23 @@ void ModeRTL::update()
 
 void ModeRTL::navigate()
 {
+    if (plane.control_mode->mode_number() != QRTL) {
+        // QRTL shares this navigate function with RTL
 
-    if ((AP_HAL::millis() - plane.last_mode_change_ms > 1000) && switch_QRTL()) {
-        return;
+        if (plane.quadplane.available() && (plane.quadplane.rtl_mode == QuadPlane::RTL_MODE::VTOL_APPROACH_QRTL)) {
+            // VTOL approach landing
+            AP_Mission::Mission_Command cmd;
+            cmd.content.location = plane.next_WP_loc;
+            plane.verify_landing_vtol_approach(cmd);
+            if (plane.vtol_approach_s.approach_stage == Plane::Landing_ApproachStage::VTOL_LANDING) {
+                plane.set_mode(plane.mode_qrtl, ModeReason::RTL_COMPLETE_SWITCHING_TO_VTOL_LAND_RTL);
+            }
+            return;
+        }
+
+        if ((AP_HAL::millis() - plane.last_mode_change_ms > 1000) && switch_QRTL()) {
+            return;
+        }
     }
 
     if (plane.g.rtl_autoland == 1 &&
@@ -93,10 +108,16 @@ void ModeRTL::navigate()
 
 // Switch to QRTL if enabled and within radius
 bool ModeRTL::switch_QRTL(bool check_loiter_target)
-{
-    if (!plane.quadplane.available() || (plane.quadplane.rtl_mode != 1)) {
+{ 
+    if (!plane.quadplane.available() || ((plane.quadplane.rtl_mode != QuadPlane::RTL_MODE::SWITCH_QRTL) && (plane.quadplane.rtl_mode != QuadPlane::RTL_MODE::QRTL_ALWAYS))) {  
         return false;
     }
+
+   // if Q_RTL_MODE is QRTL always, then immediately switch to QRTL mode
+   if (plane.quadplane.rtl_mode == QuadPlane::RTL_MODE::QRTL_ALWAYS) {
+       plane.set_mode(plane.mode_qrtl, ModeReason::QRTL_INSTEAD_OF_RTL);
+       return true;
+   }
 
     uint16_t qrtl_radius = abs(plane.g.rtl_radius);
     if (qrtl_radius == 0) {

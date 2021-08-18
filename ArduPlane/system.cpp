@@ -20,15 +20,6 @@ void Plane::init_ardupilot()
     g2.stats.init();
 #endif
 
-#if HIL_SUPPORT
-    if (g.hil_mode == 1) {
-        // set sensors to HIL mode
-        ins.set_hil_mode();
-        compass.set_hil_mode();
-        barometer.set_hil_mode();
-    }
-#endif
-
     ins.set_log_raw_bit(MASK_LOG_IMU_RAW);
 
     // setup any board specific drivers
@@ -37,6 +28,9 @@ void Plane::init_ardupilot()
 #if HAL_MAX_CAN_PROTOCOL_DRIVERS
     can_mgr.init();
 #endif
+
+    rollController.convert_pid();
+    pitchController.convert_pid();
 
     // initialise rc channels including setting mode
     rc().init();
@@ -85,15 +79,8 @@ void Plane::init_ardupilot()
     AP::compass().set_log_bit(MASK_LOG_COMPASS);
     AP::compass().init();
 
-#if OPTFLOW == ENABLED
-    // make optflow available to libraries
-    if (optflow.enabled()) {
-        ahrs.set_optflow(&optflow);
-    }
-#endif
-
 // init EFI monitoring
-#if EFI_ENABLED
+#if HAL_EFI_ENABLED
     g2.efi.init();
 #endif
 
@@ -159,6 +146,11 @@ void Plane::init_ardupilot()
 #if AC_FENCE == ENABLED
     fence.init();
 #endif
+
+#if AP_TERRAIN_AVAILABLE
+    Location::set_terrain(&terrain);
+#endif
+
 }
 
 //********************************************************************************
@@ -200,7 +192,7 @@ void Plane::startup_ground(void)
 
     // reset last heartbeat time, so we don't trigger failsafe on slow
     // startup
-    failsafe.last_heartbeat_ms = millis();
+    gcs().sysid_myggcs_seen(AP_HAL::millis());
 
     // we don't want writes to the serial port to cause us to pause
     // mid-flight, so set the serial ports non-blocking once we are
@@ -297,7 +289,8 @@ bool Plane::set_mode_by_number(const Mode::Number new_mode_number, const ModeRea
 
 void Plane::check_long_failsafe()
 {
-    uint32_t tnow = millis();
+    const uint32_t gcs_last_seen_ms = gcs().sysid_myggcs_last_seen_time_ms();
+    const uint32_t tnow = millis();
     // only act on changes
     // -------------------
     if (failsafe.state != FAILSAFE_LONG && failsafe.state != FAILSAFE_GCS && flight_stage != AP_Vehicle::FixedWing::FLIGHT_LAND) {
@@ -310,13 +303,13 @@ void Plane::check_long_failsafe()
             (tnow - radio_timeout_ms) > g.fs_timeout_long*1000) {
             failsafe_long_on_event(FAILSAFE_LONG, ModeReason::RADIO_FAILSAFE);
         } else if (g.gcs_heartbeat_fs_enabled == GCS_FAILSAFE_HB_AUTO && control_mode == &mode_auto &&
-                   failsafe.last_heartbeat_ms != 0 &&
-                   (tnow - failsafe.last_heartbeat_ms) > g.fs_timeout_long*1000) {
+                   gcs_last_seen_ms != 0 &&
+                   (tnow - gcs_last_seen_ms) > g.fs_timeout_long*1000) {
             failsafe_long_on_event(FAILSAFE_GCS, ModeReason::GCS_FAILSAFE);
         } else if ((g.gcs_heartbeat_fs_enabled == GCS_FAILSAFE_HEARTBEAT ||
                     g.gcs_heartbeat_fs_enabled == GCS_FAILSAFE_HB_RSSI) &&
-                   failsafe.last_heartbeat_ms != 0 &&
-                   (tnow - failsafe.last_heartbeat_ms) > g.fs_timeout_long*1000) {
+                   gcs_last_seen_ms != 0 &&
+                   (tnow - gcs_last_seen_ms) > g.fs_timeout_long*1000) {
             failsafe_long_on_event(FAILSAFE_GCS, ModeReason::GCS_FAILSAFE);
         } else if (g.gcs_heartbeat_fs_enabled == GCS_FAILSAFE_HB_RSSI && 
                    gcs().chan(0) != nullptr &&
@@ -332,7 +325,7 @@ void Plane::check_long_failsafe()
         }
         // We do not change state but allow for user to change mode
         if (failsafe.state == FAILSAFE_GCS && 
-            (tnow - failsafe.last_heartbeat_ms) < timeout_seconds*1000) {
+            (tnow - gcs_last_seen_ms) < timeout_seconds*1000) {
             failsafe_long_off_event(ModeReason::GCS_FAILSAFE);
         } else if (failsafe.state == FAILSAFE_LONG && 
                    !failsafe.rc_failsafe) {
@@ -364,17 +357,6 @@ void Plane::check_short_failsafe()
 
 void Plane::startup_INS_ground(void)
 {
-#if HIL_SUPPORT
-    if (g.hil_mode == 1) {
-        while (barometer.get_last_update() == 0) {
-            // the barometer begins updating when we get the first
-            // HIL_STATE message
-            gcs().send_text(MAV_SEVERITY_WARNING, "Waiting for first HIL_STATE message");
-            hal.scheduler->delay(1000);
-        }
-    }
-#endif
-
     if (ins.gyro_calibration_timing() != AP_InertialSensor::GYRO_CAL_NEVER) {
         gcs().send_text(MAV_SEVERITY_ALERT, "Beginning INS calibration. Do not move plane");
     } else {
@@ -468,12 +450,12 @@ void Plane::update_dynamic_notch()
                 ins.update_harmonic_notch_freq_hz(ref_freq);
             }
             break;
-#ifdef HAVE_AP_BLHELI_SUPPORT
+#if HAL_WITH_ESC_TELEM
         case HarmonicNotchDynamicMode::UpdateBLHeli: // BLHeli based tracking
             // set the harmonic notch filter frequency scaled on measured frequency
             if (ins.has_harmonic_option(HarmonicNotchFilterParams::Options::DynamicHarmonic)) {
                 float notches[INS_MAX_NOTCHES];
-                const uint8_t num_notches = AP_BLHeli::get_singleton()->get_motor_frequencies_hz(INS_MAX_NOTCHES, notches);
+                const uint8_t num_notches = AP::esc_telem().get_motor_frequencies_hz(INS_MAX_NOTCHES, notches);
 
                 for (uint8_t i = 0; i < num_notches; i++) {
                     notches[i] =  MAX(ref_freq, notches[i]);
@@ -486,7 +468,7 @@ void Plane::update_dynamic_notch()
                     ins.update_harmonic_notch_freq_hz(ref_freq);
                 }
             } else {
-                ins.update_harmonic_notch_freq_hz(MAX(ref_freq, AP_BLHeli::get_singleton()->get_average_motor_frequency_hz() * ref));
+                ins.update_harmonic_notch_freq_hz(MAX(ref_freq, AP::esc_telem().get_average_motor_frequency_hz() * ref));
             }
             break;
 #endif

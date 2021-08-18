@@ -7,8 +7,6 @@
 #include <AP_AHRS/AP_AHRS.h>
 #include <AP_Terrain/AP_Terrain.h>
 
-extern const AP_HAL::HAL& hal;
-
 AP_Terrain *Location::_terrain = nullptr;
 
 /// constructors
@@ -28,6 +26,7 @@ void Location::zero(void)
     memset(this, 0, sizeof(*this));
 }
 
+// Construct location using position (NEU) from ekf_origin for the given altitude frame
 Location::Location(int32_t latitude, int32_t longitude, int32_t alt_in_cm, AltFrame frame)
 {
     zero();
@@ -36,29 +35,50 @@ Location::Location(int32_t latitude, int32_t longitude, int32_t alt_in_cm, AltFr
     set_alt_cm(alt_in_cm, frame);
 }
 
-Location::Location(int32_t latitude, int32_t longitude, int8_t latitude_hp, int8_t longitude_hp, int32_t alt_in_cm, AltFrame frame){
+Location::Location(int32_t latitude, int32_t longitude, int8_t latitude_hp, int8_t longitude_hp, int32_t alt_in_cm, AltFrame frame)
+{
   zero();
   lat = latitude;
   lng = longitude;
+  // INCLUDE_HIGH_PRECISION_GPS -- might as well leave these enabled since the "_hp" fields are enabled
   lat_hp = latitude_hp;
   lng_hp = longitude_hp;
   set_alt_cm(alt_in_cm, frame);
 }
 
-Location::Location(const Vector3f &ekf_offset_neu)
+Location::Location(const Vector3f &ekf_offset_neu, AltFrame frame)
 {
+    zero();
+
     // store alt and alt frame
-    set_alt_cm(ekf_offset_neu.z, AltFrame::ABOVE_ORIGIN);
+    set_alt_cm(ekf_offset_neu.z, frame);
 
     // calculate lat, lon
     Location ekf_origin;
     if (AP::ahrs().get_origin(ekf_origin)) {
         lat = ekf_origin.lat;
         lng = ekf_origin.lng;
+        offset(ekf_offset_neu.x * 0.01, ekf_offset_neu.y * 0.01);
+    }
+}
+
+Location::Location(const Vector3d &ekf_offset_neu, AltFrame frame)
+{
+    zero();
+
+    // store alt and alt frame
+    set_alt_cm(ekf_offset_neu.z, frame);
+
+    // calculate lat, lon
+    Location ekf_origin;
+    if (AP::ahrs().get_origin(ekf_origin)) {
+        lat = ekf_origin.lat;
+        lng = ekf_origin.lng;
+        // INCLUDE_HIGH_PRECISION_GPS -- might as well leave these enabled since the "_hp" fields are enabled
         lat_hp = ekf_origin.lat_hp;
         lng_hp = ekf_origin.lng_hp;
 
-        offset(ekf_offset_neu.x / 100.0f, ekf_offset_neu.y / 100.0f);
+        offset(ekf_offset_neu.x * 0.01, ekf_offset_neu.y * 0.01);
     }
 }
 
@@ -118,7 +138,7 @@ bool Location::get_alt_cm(AltFrame desired_frame, int32_t &ret_alt_cm) const
 {
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
     if (!initialised()) {
-        AP_HAL::panic("Should not be called on invalid location");
+        AP_HAL::panic("Should not be called on invalid location: Location cannot be (0, 0, 0)");
     }
 #endif
     Location::AltFrame frame = get_alt_frame();
@@ -133,7 +153,7 @@ bool Location::get_alt_cm(AltFrame desired_frame, int32_t &ret_alt_cm) const
     float alt_terr_cm = 0;
     if (frame == AltFrame::ABOVE_TERRAIN || desired_frame == AltFrame::ABOVE_TERRAIN) {
 #if AP_TERRAIN_AVAILABLE
-        if (_terrain == nullptr || !_terrain->height_amsl(*(Location *)this, alt_terr_cm, true)) {
+        if (_terrain == nullptr || !_terrain->height_amsl(*this, alt_terr_cm, true)) {
             return false;
         }
         // convert terrain alt to cm
@@ -195,7 +215,7 @@ bool Location::get_alt_cm(AltFrame desired_frame, int32_t &ret_alt_cm) const
             ret_alt_cm = alt_abs - alt_terr_cm;
             return true;
     }
-    return false;
+    return false;  // LCOV_EXCL_LINE  - not reachable
 }
 
 bool Location::get_vector_xy_from_origin_NE(Vector2f &vec_ne) const
@@ -205,10 +225,15 @@ bool Location::get_vector_xy_from_origin_NE(Vector2f &vec_ne) const
         return false;
     }
 
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+# error Validate this update for high-precision support!!!!
     vec_ne = get_distance_NE(ekf_origin);
     vec_ne.x *= -1;
     vec_ne.y *= -1;
-
+#else
+    vec_ne.x = (lat-ekf_origin.lat) * LATLON_TO_CM;
+    vec_ne.y = diff_longitude(lng,ekf_origin.lng) * LATLON_TO_CM * longitude_scale((lat+ekf_origin.lat)/2);
+#endif
     return true;
 }
 
@@ -233,10 +258,17 @@ bool Location::get_vector_from_origin_NEU(Vector3f &vec_neu) const
 }
 
 // return distance in meters between two locations
-float Location::get_distance(const struct Location &loc2) const
+ftype Location::get_distance(const struct Location &loc2) const
 {
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+# error Validate this update for high-precision support!!!!
   Vector2f vec_ne = get_distance_NE(loc2);
   return vec_ne.length();
+#else
+    ftype dlat = (ftype)(loc2.lat - lat);
+    ftype dlng = ((ftype)diff_longitude(loc2.lng,lng)) * longitude_scale((lat+loc2.lat)/2);
+    return norm(dlat, dlng) * LOCATION_SCALING_FACTOR;
+#endif
 }
 
 
@@ -246,49 +278,128 @@ float Location::get_distance(const struct Location &loc2) const
  */
 Vector2f Location::get_distance_NE(const Location &loc2) const
 {
-  double loc1_lat_hp, loc1_lng_hp, loc2_lat_hp, loc2_lng_hp;
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+# error Validate this update for high-precision support!!!!
+  const double loc1_lat_hp = (double)lat + (lat_hp / 100.0);
+  const double loc1_lng_hp = (double)lng + (lng_hp / 100.0);
+  const double loc2_lat_hp = (double)loc2.lat + (loc2.lat_hp / 100.0);
+  const double loc2_lng_hp = (double)loc2.lng + (loc2.lng_hp / 100.0);
 
-  loc1_lat_hp = (double)lat + (lat_hp / 100.0f);
-  loc1_lng_hp = (double)lng + (lng_hp / 100.0f);
-  loc2_lat_hp = (double)loc2.lat + (loc2.lat_hp / 100.0f);
-  loc2_lng_hp = (double)loc2.lng + (loc2.lng_hp / 100.0f);
-
-  float dlat = loc2_lat_hp - loc1_lat_hp;
-  float dlng = loc2_lng_hp - loc1_lng_hp;
+  double dlat = loc2_lat_hp - loc1_lat_hp;
+  double dlng = loc2_lng_hp - loc1_lng_hp;
+  if (dlng > 180.0) {
+      dlng -= 360.0;
+  }
+  else if (dlng < -180.0) {
+      dlng += 360.0;
+  }
+#if 0
+  // this was the original implementation that used different consts for LAT and LNG, need
+  // to deteermine which approach is more accurate.
   dlat *= LOCATION_SCALING_FACTOR_LAT;
-  dlng *= LOCATION_SCALING_FACTOR_LNG * loc2.longitude_scale();
+  dlng *= LOCATION_SCALING_FACTOR_LNG * longitude_scale((loc2.lat+lat)/2);
+#else
+  dlat *= LOCATION_SCALING_FACTOR;
+  dlng *= LOCATION_SCALING_FACTOR * longitude_scale((loc2.lat+lat)/2);
+#endif
 
-  return Vector2f(dlat,dlng);
+  return Vector2f(float(dlat), float(dlng));
+#else
+  return Vector2f((loc2.lat - lat) * LOCATION_SCALING_FACTOR,
+                  diff_longitude(loc2.lng,lng) * LOCATION_SCALING_FACTOR * longitude_scale((loc2.lat+lat)/2));
+#endif
 }
 
 // return the distance in meters in North/East/Down plane as a N/E/D vector to loc2
 Vector3f Location::get_distance_NED(const Location &loc2) const
 {
-      Vector2f vec_ne = get_distance_NE(loc2);
-      return Vector3f(vec_ne.x, vec_ne.y, (alt - loc2.alt) * 0.01f);
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+# error Validate this update for high-precision support!!!!
+    Vector2f vec_ne = get_distance_NE(loc2);
+    return Vector3f(vec_ne.x, vec_ne.y, (alt - loc2.alt) * 0.01f);
+#else
+    return Vector3f((loc2.lat - lat) * LOCATION_SCALING_FACTOR,
+                    diff_longitude(loc2.lng,lng) * LOCATION_SCALING_FACTOR * longitude_scale((lat+loc2.lat)/2),
+                    (alt - loc2.alt) * 0.01);
+#endif
+}
+
+// return the distance in meters in North/East/Down plane as a N/E/D vector to loc2
+Vector3d Location::get_distance_NED_double(const Location &loc2) const
+{
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+# error Update this for high-precision support!!!!
+#else
+    return Vector3d((loc2.lat - lat) * double(LOCATION_SCALING_FACTOR),
+                    diff_longitude(loc2.lng,lng) * LOCATION_SCALING_FACTOR * longitude_scale((lat+loc2.lat)/2),
+                    (alt - loc2.alt) * 0.01);
+#endif
+}
+
+Vector2d Location::get_distance_NE_double(const Location &loc2) const
+{
+    return Vector2d((loc2.lat - lat) * double(LOCATION_SCALING_FACTOR),
+                    diff_longitude(loc2.lng,lng) * double(LOCATION_SCALING_FACTOR) * longitude_scale((lat+loc2.lat)/2));
+}
+
+Vector2F Location::get_distance_NE_ftype(const Location &loc2) const
+{
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+# error Update this for high-precision support!!!!
+#else
+    return Vector2F((loc2.lat - lat) * ftype(LOCATION_SCALING_FACTOR),
+                    diff_longitude(loc2.lng,lng) * ftype(LOCATION_SCALING_FACTOR) * longitude_scale((lat+loc2.lat)/2));
+#endif
 }
 
 // extrapolate latitude/longitude given distances (in meters) north and east
-void Location::offset(float ofs_north, float ofs_east)
+void Location::offset_latlng(int32_t &lat, int32_t &lng, ftype ofs_north, ftype ofs_east)
 {
-        double dlat = (ofs_north * LOCATION_SCALING_FACTOR_LAT_INV);
-        double dlng = ((ofs_east * LOCATION_SCALING_FACTOR_LNG_INV)/ longitude_scale());
-        double hplat = (double) lat + (lat_hp / 100.0f);
-        double hplng = (double)lng + (lng_hp / 100.0f);
+    const int32_t dlat = ofs_north * LOCATION_SCALING_FACTOR_INV;
+    const int64_t dlng = (ofs_east * LOCATION_SCALING_FACTOR_INV) / longitude_scale(lat+dlat/2);
+    lat += dlat;
+    lat = limit_lattitude(lat);
+    lng = wrap_longitude(dlng+lng);
+}
 
-        hplat += dlat;
-        hplng += dlng;
+// extrapolate latitude/longitude given distances (in meters) north and east
+void Location::offset(ftype ofs_north, ftype ofs_east)
+{
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+# error Validate this update for high-precision support!!!!
+    double dlat = (ofs_north * LOCATION_SCALING_FACTOR_LAT_INV);
+    double dlng = ((ofs_east * LOCATION_SCALING_FACTOR_LNG_INV) / longitude_scale(lat));
+    double hplat = (double)lat + (lat_hp / 100.0);
+    double hplng = (double)lng + (lng_hp / 100.0);
 
-        double intpart;
-        double fractpart;
+    hplat += dlat;
+    hplng += dlng;
+    if (hplat > 90e7) {
+        hplat -= 90e7;
+    }
+    else if (hplat < -90e7) {
+        hplat += 90e7;
+    }
+    if (hplng > 180e7) {
+        hplng -= 180e7;
+    }
+    else if (hplng < -180e7) {
+        hplng += 180e7;
+    }
 
-        fractpart = modf(hplat, &intpart);
-        lat = (int32_t)intpart;
-        lat_hp = (int8_t)(fractpart * 100.0f);
+    double intpart;
+    double fractpart;
 
-        fractpart = modf(hplng, &intpart);
-        lng = (int32_t)intpart;
-        lng_hp = (int8_t)(fractpart * 100.0f);
+    fractpart = modf(hplat, &intpart);
+    lat = (int32_t)intpart;
+    lat_hp = (int8_t)(fractpart * 100.0);
+
+    fractpart = modf(hplng, &intpart);
+    lng = (int32_t)intpart;
+    lng_hp = (int8_t)(fractpart * 100.0);
+#else
+    offset_latlng(lat, lng, ofs_north, ofs_east);
+#endif
 }
 
 /*
@@ -298,28 +409,28 @@ void Location::offset(float ofs_north, float ofs_east)
  * positions, so it keeps the accuracy even when dealing with small
  * distances and floating point numbers
  */
-void Location::offset_bearing(float bearing, float distance)
+void Location::offset_bearing(ftype bearing_deg, ftype distance)
 {
-    const float ofs_north = cosf(radians(bearing)) * distance;
-    const float ofs_east  = sinf(radians(bearing)) * distance;
+    const ftype ofs_north = cosF(radians(bearing_deg)) * distance;
+    const ftype ofs_east  = sinF(radians(bearing_deg)) * distance;
     offset(ofs_north, ofs_east);
 }
 
 // extrapolate latitude/longitude given bearing, pitch and distance
-void Location::offset_bearing_and_pitch(float bearing, float pitch, float distance)
+void Location::offset_bearing_and_pitch(ftype bearing_deg, ftype pitch_deg, ftype distance)
 {
-    const float ofs_north =  cosf(radians(pitch)) * cosf(radians(bearing)) * distance;
-    const float ofs_east  =  cosf(radians(pitch)) * sinf(radians(bearing)) * distance;
+    const ftype ofs_north =  cosF(radians(pitch_deg)) * cosF(radians(bearing_deg)) * distance;
+    const ftype ofs_east  =  cosF(radians(pitch_deg)) * sinF(radians(bearing_deg)) * distance;
     offset(ofs_north, ofs_east);
-    const int32_t dalt =  sinf(radians(pitch)) * distance *100.0f;
+    const int32_t dalt =  sinf(radians(pitch_deg)) * distance *100.0f;
     alt += dalt; 
 }
 
 
-float Location::longitude_scale() const
+ftype Location::longitude_scale(int32_t lat)
 {
-    float scale = cosf(lat * (1.0e-7f * DEG_TO_RAD));
-    return MAX(scale, 0.01f);
+    ftype scale = cosF(lat * (1.0e-7 * DEG_TO_RAD));
+    return MAX(scale, 0.01);
 }
 
 /*
@@ -352,20 +463,25 @@ bool Location::sanitize(const Location &defaultLoc)
     return has_changed;
 }
 
-// make sure we know what size the Location object is:
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+// AMH: A resize of Location is no longer necessary after moving lat_hp/lng_hp to the padding
+//      between the Location bit flags and the int32_t alt/lat/lng fields. Now the size remains
+//      16 even with the two new fields.
+// -- Comment in original branch that resized this to 20:
 //JO:
 // **** NOT SURE OF THE IMPLICATION OF INCREASING THIS SIZE! ****
-//assert_storage_size<Location, 16> _assert_storage_size_Location;
-//increase size to allow for lat_hp, lng_hp
-assert_storage_size<Location, 20> _assert_storage_size_Location;
+#endif
+// make sure we know what size the Location object is:
+assert_storage_size<Location, 16> _assert_storage_size_Location;
+
 
 // return bearing in centi-degrees from location to loc2
 // @amh: Should we update this to support lat_hp/lng_hp? Seems if loc2 is far enough away (how
 //       far?), it most likely will not change the bearing enough to matter.
 int32_t Location::get_bearing_to(const struct Location &loc2) const
 {
-    const int32_t off_x = loc2.lng - lng;
-    const int32_t off_y = (loc2.lat - lat) / loc2.longitude_scale();
+    const int32_t off_x = diff_longitude(loc2.lng,lng);
+    const int32_t off_y = (loc2.lat - lat) / loc2.longitude_scale((lat+loc2.lat)/2);
     int32_t bearing = 9000 + atan2f(-off_y, off_x) * DEGX100;
     if (bearing < 0) {
         bearing += 36000;
@@ -378,7 +494,11 @@ int32_t Location::get_bearing_to(const struct Location &loc2) const
  */
 bool Location::same_latlon_as(const Location &loc2) const
 {
+#ifdef INCLUDE_HIGH_PRECISION_GPS
     return (lat == loc2.lat) && (lng == loc2.lng) && (lat_hp == loc2.lat_hp) & (lng_hp == loc2.lng_hp);
+#else
+    return (lat == loc2.lat) && (lng == loc2.lng);
+#endif
 }
 
 // return true when lat and lng are within range
@@ -407,10 +527,64 @@ float Location::line_path_proportion(const Location &point1, const Location &poi
 {
     const Vector2f vec1 = point1.get_distance_NE(point2);
     const Vector2f vec2 = point1.get_distance_NE(*this);
-    const float dsquared = sq(vec1.x) + sq(vec1.y);
+    const ftype dsquared = sq(vec1.x) + sq(vec1.y);
     if (dsquared < 0.001f) {
         // the two points are very close together
         return 1.0f;
     }
     return (vec1 * vec2) / dsquared;
+}
+
+/*
+  wrap longitude for -180e7 to 180e7
+ */
+int32_t Location::wrap_longitude(int64_t lon)
+{
+    if (lon > 1800000000L) {
+        lon = int32_t(lon-3600000000LL);
+    } else if (lon < -1800000000L) {
+        lon = int32_t(lon+3600000000LL);
+    }
+    return int32_t(lon);
+}
+
+/*
+  get lon1-lon2, wrapping at -180e7 to 180e7
+ */
+int32_t Location::diff_longitude(int32_t lon1, int32_t lon2)
+{
+    if ((lon1 & 0x80000000) == (lon2 & 0x80000000)) {
+        // common case of same sign
+        return lon1 - lon2;
+    }
+    int64_t dlon = int64_t(lon1)-int64_t(lon2);
+    if (dlon > 1800000000LL) {
+        dlon -= 3600000000LL;
+    } else if (dlon < -1800000000LL) {
+        dlon += 3600000000LL;
+    }
+    return int32_t(dlon);
+}
+
+/*
+  limit lattitude to -90e7 to 90e7
+ */
+int32_t Location::limit_lattitude(int32_t lat)
+{
+    if (lat > 900000000L) {
+        lat = 1800000000LL - lat;
+    } else if (lat < -900000000L) {
+        lat = -(1800000000LL + lat);
+    }
+    return lat;
+}
+
+// update altitude and alt-frame base on this location's horizontal position between point1 and point2
+// this location's lat,lon is used to calculate the alt of the closest point on the line between point1 and point2
+// origin and destination's altitude frames must be the same
+// this alt-frame will be updated to match the destination alt frame
+void Location::linearly_interpolate_alt(const Location &point1, const Location &point2)
+{
+    // new target's distance along the original track and then linear interpolate between the original origin and destination altitudes
+    set_alt_cm(point1.alt + (point2.alt - point1.alt) * constrain_float(line_path_proportion(point1, point2), 0.0f, 1.0f), point2.get_alt_frame());
 }

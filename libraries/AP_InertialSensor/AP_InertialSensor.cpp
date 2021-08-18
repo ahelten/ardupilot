@@ -14,7 +14,6 @@
 #include "AP_InertialSensor.h"
 #include "AP_InertialSensor_BMI160.h"
 #include "AP_InertialSensor_Backend.h"
-#include "AP_InertialSensor_HIL.h"
 #include "AP_InertialSensor_L3G4200D.h"
 #include "AP_InertialSensor_LSM9DS0.h"
 #include "AP_InertialSensor_LSM9DS1.h"
@@ -520,7 +519,6 @@ const AP_Param::GroupInfo AP_InertialSensor::var_info[] = {
     // @DisplayName: Fast sampling mask
     // @Description: Mask of IMUs to enable fast sampling on, if available
     // @User: Advanced
-    // @Values: 1:FirstIMUOnly,3:FirstAndSecondIMU
     // @Bitmask: 0:FirstIMU,1:SecondIMU,2:ThirdIMU
     AP_GROUPINFO("FAST_SAMPLE",  36, AP_InertialSensor, _fast_sampling_mask,   HAL_DEFAULT_INS_FAST_SAMPLE),
 
@@ -536,7 +534,6 @@ const AP_Param::GroupInfo AP_InertialSensor::var_info[] = {
     // @DisplayName: IMU enable mask
     // @Description: Bitmask of IMUs to enable. It can be used to prevent startup of specific detected IMUs
     // @User: Advanced
-    // @Values: 1:FirstIMUOnly,3:FirstAndSecondIMU,7:FirstSecondAndThirdIMU,127:AllIMUs
     // @Bitmask: 0:FirstIMU,1:SecondIMU,2:ThirdIMU
     AP_GROUPINFO("ENABLE_MASK",  40, AP_InertialSensor, _enable_mask, 0x7F),
 
@@ -676,11 +673,11 @@ AP_InertialSensor *AP_InertialSensor::get_singleton()
 /*
   register a new gyro instance
  */
-uint8_t AP_InertialSensor::register_gyro(uint16_t raw_sample_rate_hz,
-                                         uint32_t id)
+bool AP_InertialSensor::register_gyro(uint8_t &instance, uint16_t raw_sample_rate_hz, uint32_t id)
 {
     if (_gyro_count == INS_MAX_INSTANCES) {
-        AP_HAL::panic("Too many gyros");
+        gcs().send_text(MAV_SEVERITY_WARNING, "Failed to register gyro id %u", unsigned(id));
+        return false;
     }
 
     _gyro_raw_sample_rates[_gyro_count] = raw_sample_rate_hz;
@@ -704,17 +701,19 @@ uint8_t AP_InertialSensor::register_gyro(uint16_t raw_sample_rate_hz,
     }
 #endif
 
-    return _gyro_count++;
+    instance = _gyro_count++;
+
+    return true;
 }
 
 /*
   register a new accel instance
  */
-uint8_t AP_InertialSensor::register_accel(uint16_t raw_sample_rate_hz,
-                                          uint32_t id)
+bool AP_InertialSensor::register_accel(uint8_t &instance, uint16_t raw_sample_rate_hz, uint32_t id)
 {
     if (_accel_count == INS_MAX_INSTANCES) {
-        AP_HAL::panic("Too many accels");
+        gcs().send_text(MAV_SEVERITY_WARNING, "Failed to register accel id %u", unsigned(id));
+        return false;
     }
 
     _accel_raw_sample_rates[_accel_count] = raw_sample_rate_hz;
@@ -742,7 +741,8 @@ uint8_t AP_InertialSensor::register_accel(uint16_t raw_sample_rate_hz,
         _accel_id[_accel_count].save();
 #endif
 
-    return _accel_count++;
+    instance = _accel_count++;
+    return true;
 }
 
 /*
@@ -774,7 +774,6 @@ void AP_InertialSensor::_start_backends()
 /* Find the N instance of the backend that has already been successfully detected */
 AP_InertialSensor_Backend *AP_InertialSensor::_find_backend(int16_t backend_id, uint8_t instance)
 {
-    assert(_backends_detected);
     uint8_t found = 0;
 
     for (uint8_t i = 0; i < _backend_count; i++) {
@@ -937,12 +936,6 @@ AP_InertialSensor::detect_backends(void)
 // macro for use by HAL_INS_PROBE_LIST
 #define GET_I2C_DEVICE(bus, address) hal.i2c_mgr->get_device(bus, address)
 
-    if (_hil_mode) {
-        ADD_BACKEND(AP_InertialSensor_HIL::detect(*this));
-        return;
-    }
-
-
 #if HAL_EXTERNAL_AHRS_ENABLED
     // if enabled, make the first IMU the external AHRS
     if (int8_t serial_port = AP::externalAHRS().get_port() >= 0) {
@@ -960,8 +953,6 @@ AP_InertialSensor::detect_backends(void)
 #if defined(HAL_SITL_INVENSENSEV3)
     ADD_BACKEND(AP_InertialSensor_Invensensev3::probe(*this, hal.i2c_mgr->get_device(1, 1), ROTATION_NONE));
 #endif
-#elif HAL_INS_DEFAULT == HAL_INS_HIL
-    ADD_BACKEND(AP_InertialSensor_HIL::detect(*this));
 #elif AP_FEATURE_BOARD_DETECT
     switch (AP_BoardConfig::get_board_type()) {
     case AP_BoardConfig::PX4_BOARD_PX4V1:
@@ -1255,11 +1246,6 @@ failed:
  */
 bool AP_InertialSensor::accel_calibrated_ok_all() const
 {
-    // calibration is not applicable for HIL mode
-    if (_hil_mode) {
-        return true;
-    }
-
     // check each accelerometer has offsets saved
     for (uint8_t i=0; i<get_accel_count(); i++) {
         if (!_accel_id_ok[i]) {
@@ -1499,7 +1485,6 @@ void AP_InertialSensor::update(void)
     // wait_for_sample(), and a wait is implied
     wait_for_sample();
 
-    if (!_hil_mode) {
         for (uint8_t i=0; i<INS_MAX_INSTANCES; i++) {
             // mark sensors unhealthy and let update() in each backend
             // mark them healthy via _publish_gyro() and
@@ -1580,7 +1565,6 @@ void AP_InertialSensor::update(void)
                 break;
             }
         }
-    }
 
     _last_update_usec = AP_HAL::micros();
     
@@ -1654,7 +1638,6 @@ void AP_InertialSensor::wait_for_sample(void)
     }
 
 check_sample:
-    if (!_hil_mode) {
         // now we wait until we have the gyro and accel samples we need
         uint8_t gyro_available_mask = 0;
         uint8_t accel_available_mask = 0;
@@ -1718,15 +1701,9 @@ check_sample:
             hal.scheduler->delay_microseconds_boost(wait_per_loop);
             wait_counter++;
         }
-    }
 
     now = AP_HAL::micros();
-    if (_hil_mode && _hil.delta_time > 0) {
-        _delta_time = _hil.delta_time;
-        _hil.delta_time = 0;
-    } else {
-        _delta_time = (now - _last_sample_usec) * 1.0e-6f;
-    }
+    _delta_time = (now - _last_sample_usec) * 1.0e-6f;
     _last_sample_usec = now;
 
 #if 0
@@ -1795,78 +1772,6 @@ bool AP_InertialSensor::get_delta_velocity(uint8_t i, Vector3f &delta_velocity, 
         return true;
     }
     return false;
-}
-
-/*
-  support for setting accel and gyro vectors, for use by HIL
- */
-void AP_InertialSensor::set_accel(uint8_t instance, const Vector3f &accel)
-{
-    if (_accel_count == 0) {
-        // we haven't initialised yet
-        return;
-    }
-    if (instance < INS_MAX_INSTANCES) {
-        _accel[instance] = accel;
-        _accel_healthy[instance] = true;
-        if (_accel_count <= instance) {
-            _accel_count = instance+1;
-        }
-        if (!_accel_healthy[_primary_accel]) {
-            _primary_accel = instance;
-        }
-    }
-}
-
-void AP_InertialSensor::set_gyro(uint8_t instance, const Vector3f &gyro)
-{
-    if (_gyro_count == 0) {
-        // we haven't initialised yet
-        return;
-    }
-    if (instance < INS_MAX_INSTANCES) {
-        _gyro[instance] = gyro;
-        _gyro_healthy[instance] = true;
-        if (_gyro_count <= instance) {
-            _gyro_count = instance+1;
-            _gyro_cal_ok[instance] = true;
-        }
-        if (!_accel_healthy[_primary_accel]) {
-            _primary_accel = instance;
-        }
-    }
-}
-
-/*
-  set delta time for next ins.update()
- */
-void AP_InertialSensor::set_delta_time(float delta_time)
-{
-    _hil.delta_time = delta_time;
-}
-
-/*
-  set delta velocity for next update
- */
-void AP_InertialSensor::set_delta_velocity(uint8_t instance, float deltavt, const Vector3f &deltav)
-{
-    if (instance < INS_MAX_INSTANCES) {
-        _delta_velocity_valid[instance] = true;
-        _delta_velocity[instance] = deltav;
-        _delta_velocity_dt[instance] = deltavt;
-    }
-}
-
-/*
-  set delta angle for next update
- */
-void AP_InertialSensor::set_delta_angle(uint8_t instance, const Vector3f &deltaa, float deltaat)
-{
-    if (instance < INS_MAX_INSTANCES) {
-        _delta_angle_valid[instance] = true;
-        _delta_angle[instance] = deltaa;
-        _delta_angle_dt[instance] = deltaat;
-    }
 }
 
 /*

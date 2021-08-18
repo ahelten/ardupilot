@@ -12,6 +12,69 @@
     LOG_GPS_UBX2_MSG
 
 
+#ifndef INCLUDE_HIGH_PRECISION_GPS
+// @LoggerMessage: GPS
+// @Description: Information received from GNSS systems attached to the autopilot
+// @Field: TimeUS: Time since system startup
+// @Field: I: GPS instance number
+// @Field: Status: GPS Fix type; 2D fix, 3D fix etc.
+// @Field: GMS: milliseconds since start of GPS Week
+// @Field: GWk: weeks since 5 Jan 1980
+// @Field: NSats: number of satellites visible
+// @Field: HDop: horizontal precision
+// @Field: Lat: latitude
+// @Field: Lng: longitude
+// @Field: Alt: altitude
+// @Field: Spd: ground speed
+// @Field: GCrs: ground course
+// @Field: VZ: vertical speed
+// @Field: Yaw: vehicle yaw
+// @Field: U: boolean value indicating whether this GPS is in use
+struct PACKED log_GPS {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    uint8_t  instance;
+    uint8_t  status;
+    uint32_t gps_week_ms;
+    uint16_t gps_week;
+    uint8_t  num_sats;
+    uint16_t hdop;
+    int32_t  latitude;
+    int32_t  longitude;
+    int32_t  altitude;
+    float    ground_speed;
+    float    ground_course;
+    float    vel_z;
+    float    yaw;
+    uint8_t  used;
+};
+
+// @LoggerMessage: GPA
+// @Description: GPS accuracy information
+// @Field: I: GPS instance number
+// @Field: TimeUS: Time since system startup
+// @Field: VDop: vertical degree of procession
+// @Field: HAcc: horizontal position accuracy
+// @Field: VAcc: vertical position accuracy
+// @Field: SAcc: speed accuracy
+// @Field: YAcc: yaw accuracy
+// @Field: VV: true if vertical velocity is available
+// @Field: SMS: time since system startup this sample was taken
+// @Field: Delta: system time delta between the last two reported positions
+struct PACKED log_GPA {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    uint8_t  instance;
+    uint16_t vdop;
+    uint16_t hacc;
+    uint16_t vacc;
+    uint16_t sacc;
+    float    yaw_accuracy;
+    uint8_t  have_vv;
+    uint32_t sample_ms;
+    uint16_t delta_ms;
+};
+#else
 // @LoggerMessage: GPS
 // @Description: Information received from GNSS systems attached to the autopilot
 // @Field: TimeUS: Time since system startup
@@ -77,6 +140,7 @@ struct PACKED log_GPA {
     uint16_t delta_ms;
     uint8_t  num_sats;
 };
+#endif
 
 /*
   UBlox logging
@@ -198,6 +262,23 @@ struct PACKED log_GPS_RAWS {
     uint8_t trkStat;
 };
 
+#ifndef INCLUDE_HIGH_PRECISION_GPS
+#define LOG_STRUCTURE_FROM_GPS \
+    { LOG_GPS_MSG, sizeof(log_GPS), \
+      "GPS",  "QBBIHBcLLeffffB", "TimeUS,I,Status,GMS,GWk,NSats,HDop,Lat,Lng,Alt,Spd,GCrs,VZ,Yaw,U", "s#---SmDUmnhnh-", "F----0BGGB000--" }, \
+    { LOG_GPA_MSG,  sizeof(log_GPA), \
+      "GPA",  "QBCCCCfBIH", "TimeUS,I,VDop,HAcc,VAcc,SAcc,YAcc,VV,SMS,Delta", "s#mmmnd-ss", "F-BBBB0-CC" }, \
+    { LOG_GPS_UBX1_MSG, sizeof(log_Ubx1), \
+      "UBX1", "QBHBBHI",  "TimeUS,Instance,noisePerMS,jamInd,aPower,agcCnt,config", "s#-----", "F------"  }, \
+    { LOG_GPS_UBX2_MSG, sizeof(log_Ubx2), \
+      "UBX2", "QBbBbB", "TimeUS,Instance,ofsI,magI,ofsQ,magQ", "s#----", "F-----" }, \
+    { LOG_GPS_RAW_MSG, sizeof(log_GPS_RAW), \
+      "GRAW", "QIHBBddfBbB", "TimeUS,WkMS,Week,numSV,sv,cpMes,prMes,doMes,mesQI,cno,lli", "s--S-------", "F--0-------" }, \
+    { LOG_GPS_RAWH_MSG, sizeof(log_GPS_RAWH), \
+      "GRXH", "QdHbBB", "TimeUS,rcvTime,week,leapS,numMeas,recStat", "s-----", "F-----" }, \
+    { LOG_GPS_RAWS_MSG, sizeof(log_GPS_RAWS), \
+      "GRXS", "QddfBBBHBBBBB", "TimeUS,prMes,cpMes,doMes,gnss,sv,freq,lock,cno,prD,cpD,doD,trk", "s------------", "F------------" },
+#else
 #define LOG_STRUCTURE_FROM_GPS \
     { LOG_GPS_MSG, sizeof(log_GPS), \
     /*"GPS",  "QBBIHBcLLeffffB", "TimeUS,I,Status,GMS,GWk,NSats,HDop,Lat,Lng,Alt,Spd,GCrs,VZ,Yaw,U", "s#---SmDUmnhnh-", "F----0BGGB000--" },*/ \
@@ -215,3 +296,4 @@ struct PACKED log_GPS_RAWS {
       "GRXH", "QdHbBB", "TimeUS,rcvTime,week,leapS,numMeas,recStat", "s-----", "F-----" }, \
     { LOG_GPS_RAWS_MSG, sizeof(log_GPS_RAWS), \
       "GRXS", "QddfBBBHBBBBB", "TimeUS,prMes,cpMes,doMes,gnss,sv,freq,lock,cno,prD,cpD,doD,trk", "s------------", "F------------" },
+#endif

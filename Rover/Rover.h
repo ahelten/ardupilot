@@ -17,6 +17,8 @@
 */
 #pragma once
 
+#define INCLUDE_XTRACK_STATS
+
 #include <cmath>
 #include <stdarg.h>
 
@@ -68,6 +70,7 @@
 #include <AP_Follow/AP_Follow.h>
 #include <AP_OSD/AP_OSD.h>
 #include <AP_WindVane/AP_WindVane.h>
+#include <AP_Motors/AP_MotorsUGV.h>
 
 #ifdef ENABLE_SCRIPTING
 #include <AP_Scripting/AP_Scripting.h>
@@ -78,7 +81,6 @@
 #endif
 
 // Local modules
-#include "AP_MotorsUGV.h"
 #include "mode.h"
 #include "AP_Arming.h"
 #include "sailboat.h"
@@ -210,7 +212,6 @@ private:
         uint32_t start_time;        // start time of the earliest failsafe
         uint8_t triggered;          // bit flags of failsafes that have triggered an action
         uint32_t last_valid_rc_ms;  // system time of most recent RC input from pilot
-        uint32_t last_heartbeat_ms; // system time of most recent heartbeat from ground station
         bool ekf;
     } failsafe;
 
@@ -265,8 +266,8 @@ private:
 
     // cruise throttle and speed learning
     typedef struct {
-        LowPassFilterFloat speed_filt = LowPassFilterFloat(2.0f);
-        LowPassFilterFloat throttle_filt = LowPassFilterFloat(2.0f);
+        LowPassFilterFloat speed_filt{2.0f};
+        LowPassFilterFloat throttle_filt{2.0f};
         uint32_t learn_start_ms;
         uint32_t log_count;
     } cruise_learn_t;
@@ -416,6 +417,7 @@ private:
     static_assert(_failsafe_priorities[ARRAY_SIZE(_failsafe_priorities) - 1] == -1,
                   "_failsafe_priorities is missing the sentinel");
 
+#ifdef INCLUDE_XTRACK_STATS
     double avg_xtrack_corner_total = 0.0f;
     float xtrack_corner_max = 0.0f;
     unsigned long avg_xtrack_corner_count = 0;
@@ -426,6 +428,7 @@ private:
     float xtrack_wp_max = 0.0f;
     unsigned long avg_xtrack_wp_count = 0;
     float _slow_limit = 9999.0f;
+#endif
 
 
 public:

@@ -106,7 +106,7 @@ const AP_Param::GroupInfo AP_GPS::var_info[] = {
 #if GPS_MAX_RECEIVERS > 1
     // @Param: _AUTO_SWITCH
     // @DisplayName: Automatic Switchover Setting
-    // @Description: Automatic switchover to GPS reporting best lock, 1:UseBest selects the GPS with highest status, if both are equal the GPS with highest satellite count is used 4:Use primary if 3D fix or better, will revert over 'UseBest' behaviour if 3D fix is lost on primary
+    // @Description: Automatic switchover to GPS reporting best lock, 1:UseBest selects the GPS with highest status, if both are equal the GPS with highest satellite count is used 4:Use primary if 3D fix or better, will revert to 'UseBest' behaviour if 3D fix is lost on primary
     // @Values: 0:Use primary, 1:UseBest, 2:Blend, 4:Use primary if 3D fix or better
     // @User: Advanced
     AP_GROUPINFO("_AUTO_SWITCH", 3, AP_GPS, _auto_switch, (int8_t)GPSAutoSwitch::USE_BEST),
@@ -160,8 +160,7 @@ const AP_Param::GroupInfo AP_GPS::var_info[] = {
     // @Param: _GNSS_MODE
     // @DisplayName: GNSS system configuration
     // @Description: Bitmask for what GNSS system to use on the first GPS (all unchecked or zero to leave GPS as configured)
-    // @Values: 0:Leave as currently configured, 1:GPS-NoSBAS, 3:GPS+SBAS, 4:Galileo-NoSBAS, 6:Galileo+SBAS, 8:Beidou, 51:GPS+IMES+QZSS+SBAS (Japan Only), 64:GLONASS, 66:GLONASS+SBAS, 67:GPS+GLONASS+SBAS
-    // @Bitmask: 0:GPS,1:SBAS,2:Galileo,3:Beidou,4:IMES,5:QZSS,6:GLOSNASS
+    // @Bitmask: 0:GPS,1:SBAS,2:Galileo,3:Beidou,4:IMES,5:QZSS,6:GLONASS
     // @User: Advanced
     AP_GROUPINFO("_GNSS_MODE", 10, AP_GPS, _gnss_mode[0], 0),
 
@@ -176,8 +175,7 @@ const AP_Param::GroupInfo AP_GPS::var_info[] = {
     // @Param: _GNSS_MODE2
     // @DisplayName: GNSS system configuration
     // @Description: Bitmask for what GNSS system to use on the second GPS (all unchecked or zero to leave GPS as configured)
-    // @Values: 0:Leave as currently configured, 1:GPS-NoSBAS, 3:GPS+SBAS, 4:Galileo-NoSBAS, 6:Galileo+SBAS, 8:Beidou, 51:GPS+IMES+QZSS+SBAS (Japan Only), 64:GLONASS, 66:GLONASS+SBAS, 67:GPS+GLONASS+SBAS
-    // @Bitmask: 0:GPS,1:SBAS,2:Galileo,3:Beidou,4:IMES,5:QZSS,6:GLOSNASS
+    // @Bitmask: 0:GPS,1:SBAS,2:Galileo,3:Beidou,4:IMES,5:QZSS,6:GLONASS
     // @User: Advanced
     AP_GROUPINFO("_GNSS_MODE2", 12, AP_GPS, _gnss_mode[1], 0),
 #endif
@@ -643,8 +641,13 @@ void AP_GPS::detect_instance(uint8_t instance)
         if (_auto_config == GPS_AUTO_CONFIG_ENABLE && new_gps == nullptr) {
             if (_type[instance] == GPS_TYPE_HEMI) {
                 send_blob_start(instance, AP_GPS_NMEA_HEMISPHERE_INIT_STRING, strlen(AP_GPS_NMEA_HEMISPHERE_INIT_STRING));
-            } else if (_type[instance] == GPS_TYPE_UBLOX_RTK_BASE ||
-                       _type[instance] == GPS_TYPE_UBLOX_RTK_ROVER) {
+            } else if ((_type[instance] == GPS_TYPE_UBLOX_RTK_BASE ||
+                        _type[instance] == GPS_TYPE_UBLOX_RTK_ROVER) &&
+                       ((_driver_options.get() & AP_GPS_Backend::DriverOptions::UBX_MBUseUart2) == 0)) {
+                // we use 460800 when doing moving baseline as we need
+                // more bandwidth. We don't do this if using UART2, as
+                // in that case the RTCMv3 data doesn't go over the
+                // link to the flight controller
                 static const char blob[] = UBLOX_SET_BINARY_460800;
                 send_blob_start(instance, blob, sizeof(blob));
             } else {
@@ -667,6 +670,7 @@ void AP_GPS::detect_instance(uint8_t instance)
           the uBlox into 230400 no matter what rate it is configured
           for.
         */
+
         if ((_type[instance] == GPS_TYPE_AUTO ||
              _type[instance] == GPS_TYPE_UBLOX) &&
             ((!_auto_config && _baudrates[dstate->current_baud] >= 38400) ||
@@ -675,9 +679,10 @@ void AP_GPS::detect_instance(uint8_t instance)
             new_gps = new AP_GPS_UBLOX(*this, state[instance], _port[instance], GPS_ROLE_NORMAL);
         }
 
+        const uint32_t ublox_mb_required_baud = (_driver_options.get() & AP_GPS_Backend::DriverOptions::UBX_MBUseUart2)?230400:460800;
         if ((_type[instance] == GPS_TYPE_UBLOX_RTK_BASE ||
              _type[instance] == GPS_TYPE_UBLOX_RTK_ROVER) &&
-            _baudrates[dstate->current_baud] == 460800 &&
+            _baudrates[dstate->current_baud] == ublox_mb_required_baud &&
             AP_GPS_UBLOX::_detect(dstate->ublox_detect_state, data)) {
             GPS_Role role;
             if (_type[instance] == GPS_TYPE_UBLOX_RTK_BASE) {
@@ -748,7 +753,7 @@ AP_GPS::GPS_Status AP_GPS::highest_supported_status(uint8_t instance) const
 
 bool AP_GPS::should_log() const
 {
-#ifndef HAL_BUILD_AP_PERIPH
+#if HAL_LOGGING_ENABLED
     AP_Logger *logger = AP_Logger::get_singleton();
     if (logger == nullptr) {
         return false;
@@ -883,12 +888,14 @@ void AP_GPS::update_instance(uint8_t instance)
             }
         }
     }
-    
-#ifndef HAL_BUILD_AP_PERIPH
+
+#if HAL_LOGGING_ENABLED
     if (data_should_be_logged && should_log()) {
         Write_GPS(instance);
     }
+#endif
 
+#ifndef HAL_BUILD_AP_PERIPH
     if (state[instance].status >= GPS_OK_FIX_3D) {
         const uint64_t now = time_epoch_usec(instance);
         if (now != 0) {
@@ -977,45 +984,26 @@ void AP_GPS::update_primary(void)
 
     uint32_t now = AP_HAL::millis();
 
-    // special handling of RTK moving baseline pair. If a rover has a
-    // RTK fixed lock and yaw available then always select it as
-    // primary. This ensures that the yaw data and position/velocity
-    // data is time aligned whenever we provide yaw to the EKF
+    // special handling of RTK moving baseline pair. Always use the
+    // base as the rover position is derived from the base, which
+    // means the rover always has worse position and velocity than the
+    // base. This overrides the normal logic which would select the
+    // rover as it typically is in fix type 6 (RTK) whereas base is
+    // usually fix type 3
     for (uint8_t i=0; i<GPS_MAX_RECEIVERS; i++) {
-        if (_type[i] == GPS_TYPE_UBLOX_RTK_ROVER &&
-            state[i].status == GPS_OK_FIX_3D_RTK_FIXED &&
-            state[i].have_gps_yaw) {
-            if (primary_instance != i) {
-                _last_instance_swap_ms = now;
-                primary_instance = i;
-            }
-            return;
-        }
-        /*
-          if this is a BASE and the other GPS is a MB rover, then we
-          should force the use of the BASE GPS if the rover doesn't
-          have a yaw lock. This is important as when the rover doesn't
-          have a lock it will often report a higher status than the
-          base (eg. status=4), but the velocity and position data can
-          be very bad. As the rover is getting it's base position from
-          the base GPS then the position and velocity are expected to
-          be worse than the base GPS unless it has a full moving
-          baseline lock
-         */
-        const uint8_t i2 = i^1; // the other GPS in the pair
         if (_type[i] == GPS_TYPE_UBLOX_RTK_BASE &&
-            state[i].status >= GPS_OK_FIX_3D &&
-            _type[i2] == GPS_TYPE_UBLOX_RTK_ROVER &&
-            (state[i2].status != GPS_OK_FIX_3D_RTK_FIXED ||
-             !state[i2].have_gps_yaw)) {
+            _type[i^1] == GPS_TYPE_UBLOX_RTK_ROVER &&
+            ((state[i].status >= GPS_OK_FIX_3D) || (state[i].status >= state[i^1].status))) {
             if (primary_instance != i) {
                 _last_instance_swap_ms = now;
                 primary_instance = i;
             }
+            // don't do any more switching logic. We don't want the
+            // RTK status of the rover to cause a switch
             return;
         }
     }
-    
+
     // handling switching away from blended GPS
     if (primary_instance == GPS_BLENDED_INSTANCE) {
         primary_instance = 0;
@@ -1134,55 +1122,6 @@ void AP_GPS::handle_external(const AP_ExternalAHRS::gps_data_message_t &pkt)
 }
 #endif // HAL_EXTERNAL_AHRS_ENABLED
 
-/*
-  set HIL (hardware in the loop) status for a GPS instance
- */
-void AP_GPS::setHIL(uint8_t instance, GPS_Status _status, uint64_t time_epoch_ms,
-                    const Location &_location, const Vector3f &_velocity, uint8_t _num_sats,
-                    uint16_t hdop)
-{
-    if (instance >= GPS_MAX_RECEIVERS) {
-        return;
-    }
-    const uint32_t tnow = AP_HAL::millis();
-    GPS_State &istate = state[instance];
-    istate.status = _status;
-    istate.location = _location;
-    istate.velocity = _velocity;
-    istate.ground_speed = norm(istate.velocity.x, istate.velocity.y);
-    istate.ground_course = wrap_360(degrees(atan2f(istate.velocity.y, istate.velocity.x)));
-    istate.hdop = hdop;
-    istate.num_sats = _num_sats;
-    istate.last_gps_time_ms = tnow;
-    uint64_t gps_time_ms = time_epoch_ms - UNIX_OFFSET_MSEC;
-    istate.time_week     = gps_time_ms / AP_MSEC_PER_WEEK;
-    istate.time_week_ms  = gps_time_ms - istate.time_week * AP_MSEC_PER_WEEK;
-    timing[instance].last_message_time_ms = tnow;
-    timing[instance].last_fix_time_ms = tnow;
-    _type[instance].set(GPS_TYPE_HIL);
-}
-
-// set accuracy for HIL
-void AP_GPS::setHIL_Accuracy(uint8_t instance, float vdop, float hacc, float vacc, float sacc, bool _have_vertical_velocity, uint32_t sample_ms)
-{
-    if (instance >= GPS_MAX_RECEIVERS) {
-        return;
-    }
-    GPS_State &istate = state[instance];
-    istate.vdop = vdop * 100;
-    istate.horizontal_accuracy = hacc;
-    istate.vertical_accuracy = vacc;
-    istate.speed_accuracy = sacc;
-    istate.have_horizontal_accuracy = true;
-    istate.have_vertical_accuracy = true;
-    istate.have_speed_accuracy = true;
-    istate.have_vertical_velocity |= _have_vertical_velocity;
-    if (sample_ms != 0) {
-        timing[instance].last_message_time_ms = sample_ms;
-        timing[instance].last_fix_time_ms = sample_ms;
-    }
-}
-
 /**
    Lock a GPS port, preventing the GPS driver from using it. This can
    be used to allow a user to control a GPS port via the
@@ -1237,7 +1176,8 @@ uint16_t AP_GPS::gps_yaw_cdeg(uint8_t instance) const
         return 0;
     }
     float yaw_deg, accuracy_deg;
-    if (!gps_yaw_deg(instance, yaw_deg, accuracy_deg)) {
+    uint32_t time_ms;
+    if (!gps_yaw_deg(instance, yaw_deg, accuracy_deg, time_ms)) {
         return 65535;
     }
     int yaw_cd = wrap_360_cd(yaw_deg * 100);
@@ -1285,6 +1225,12 @@ void AP_GPS::send_mavlink_gps2_raw(mavlink_channel_t chan)
     }
 
     const Location &loc = location(1);
+    float hacc = 0.0f;
+    float vacc = 0.0f;
+    float sacc = 0.0f;
+    horizontal_accuracy(1, hacc);
+    vertical_accuracy(1, vacc);
+    speed_accuracy(1, sacc);
     mavlink_msg_gps2_raw_send(
         chan,
         last_fix_time_ms(1)*(uint64_t)1000,
@@ -1299,7 +1245,12 @@ void AP_GPS::send_mavlink_gps2_raw(mavlink_channel_t chan)
         num_sats(1),
         state[1].rtk_num_sats,
         state[1].rtk_age_ms,
-        gps_yaw_cdeg(1));
+        gps_yaw_cdeg(1),
+        0,                    // TODO: Elipsoid height in mm
+        hacc * 1000,          // one-sigma standard deviation in mm
+        vacc * 1000,          // one-sigma standard deviation in mm
+        sacc * 1000,          // one-sigma standard deviation in mm/s
+        0);                    // TODO one-sigma heading accuracy standard deviation
 }
 #endif // GPS_MAX_RECEIVERS
 
@@ -1725,7 +1676,7 @@ void AP_GPS::calc_blended_state(void)
     _blended_antenna_offset.zero();
     _blended_lag_sec = 0;
 
-#ifndef HAL_BUILD_AP_PERIPH
+#if HAL_LOGGING_ENABLED
     const uint32_t last_blended_message_time_ms = timing[GPS_BLENDED_INSTANCE].last_message_time_ms;
 #endif
     timing[GPS_BLENDED_INSTANCE].last_fix_time_ms = 0;
@@ -1870,7 +1821,7 @@ void AP_GPS::calc_blended_state(void)
     timing[GPS_BLENDED_INSTANCE].last_fix_time_ms = (uint32_t)temp_time_1;
     timing[GPS_BLENDED_INSTANCE].last_message_time_ms = (uint32_t)temp_time_2;
 
-#ifndef HAL_BUILD_AP_PERIPH
+#if HAL_LOGGING_ENABLED
     if (timing[GPS_BLENDED_INSTANCE].last_message_time_ms > last_blended_message_time_ms &&
         should_log()) {
         Write_GPS(GPS_BLENDED_INSTANCE);
@@ -1975,8 +1926,29 @@ void AP_GPS::Write_GPS(uint8_t i)
     const struct Location &loc = location(i);
 
     float yaw_deg=0, yaw_accuracy_deg=0;
-    gps_yaw_deg(i, yaw_deg, yaw_accuracy_deg);
+    uint32_t yaw_time_ms;
+    gps_yaw_deg(i, yaw_deg, yaw_accuracy_deg, yaw_time_ms);
 
+#ifndef INCLUDE_HIGH_PRECISION_GPS
+    const struct log_GPS pkt {
+        LOG_PACKET_HEADER_INIT(LOG_GPS_MSG),
+        time_us       : time_us,
+        instance      : i,
+        status        : (uint8_t)status(i),
+        gps_week_ms   : time_week_ms(i),
+        gps_week      : time_week(i),
+        num_sats      : num_sats(i),
+        hdop          : get_hdop(i),
+        latitude      : loc.lat,
+        longitude     : loc.lng,
+        altitude      : loc.alt,
+        ground_speed  : ground_speed(i),
+        ground_course : ground_course(i),
+        vel_z         : velocity(i).z,
+        yaw           : yaw_deg,
+        used          : (uint8_t)(AP::gps().primary_sensor() == i)
+    };
+#else
     const struct log_GPS pkt {
         LOG_PACKET_HEADER_INIT(LOG_GPS_MSG),
         time_us       : time_us,
@@ -1994,6 +1966,7 @@ void AP_GPS::Write_GPS(uint8_t i)
         yaw           : yaw_deg,
         used          : (uint8_t)(AP::gps().primary_sensor() == i)
     };
+#endif
     AP::logger().WriteBlock(&pkt, sizeof(pkt));
 
     /* write auxiliary accuracy information as well */
@@ -2001,6 +1974,21 @@ void AP_GPS::Write_GPS(uint8_t i)
     horizontal_accuracy(i, hacc);
     vertical_accuracy(i, vacc);
     speed_accuracy(i, sacc);
+#ifndef INCLUDE_HIGH_PRECISION_GPS
+    struct log_GPA pkt2{
+        LOG_PACKET_HEADER_INIT(LOG_GPA_MSG),
+        time_us       : time_us,
+        instance      : i,
+        vdop          : get_vdop(i),
+        hacc          : (uint16_t)MIN((hacc*100), UINT16_MAX),
+        vacc          : (uint16_t)MIN((vacc*100), UINT16_MAX),
+        sacc          : (uint16_t)MIN((sacc*100), UINT16_MAX),
+        yaw_accuracy  : yaw_accuracy_deg,
+        have_vv       : (uint8_t)have_vertical_velocity(i),
+        sample_ms     : last_message_time_ms(i),
+        delta_ms      : last_message_delta_time_ms(i)
+    };
+#else
     struct log_GPA pkt2{
         LOG_PACKET_HEADER_INIT(LOG_GPA_MSG),
         time_us       : time_us,
@@ -2017,8 +2005,85 @@ void AP_GPS::Write_GPS(uint8_t i)
         delta_ms      : last_message_delta_time_ms(i),
         num_sats      : num_sats(i)
     };
+#endif
     AP::logger().WriteBlock(&pkt2, sizeof(pkt2));
 }
+
+/*
+  get GPS based yaw
+ */
+#ifdef INCLUDE_AMH_GPSYAW_CHANGES
+// @amh: The overall design here is too inconsistent to fix properly but if you happen to
+// be using Ublox (we are) then you can see that 'have_gps_yaw_accuracy' is set false when
+// the Ublox device itself determines it has no GPS yaw (even though it is configured for
+// it and is sending RELPOSNED). The original version of this function returned a
+// hard-coded accuracy of 10 degrees but otherwise considered the yaw to be "accurate" even
+// when the underlying GPS device considered it be 100% invalid. The new version of this
+// function returns false if 'have_gps_yaw_accuracy' is false instead of faking the
+// accuracy. This might not be better but it makes more sense at this moment.
+//
+bool AP_GPS::gps_yaw_deg(uint8_t instance, float &yaw_deg, float &accuracy_deg, uint32_t &time_ms) const
+{
+#if GPS_MAX_RECEIVERS > 1
+    if (instance < GPS_MAX_RECEIVERS &&
+        _type[instance] == GPS_TYPE_UBLOX_RTK_BASE &&
+        _type[instance^1] == GPS_TYPE_UBLOX_RTK_ROVER) {
+        // return the yaw from the rover
+        instance ^= 1;
+    }
+#endif
+    if (!have_gps_yaw(instance)) {
+        return false;
+    }
+    else if (!state[instance].have_gps_yaw_accuracy) {
+        return false;
+    }
+    yaw_deg = state[instance].gps_yaw;
+
+    // get lagged timestamp
+    time_ms = state[instance].gps_yaw_time_ms;
+    float lag_s;
+    if (get_lag(instance, lag_s)) {
+        uint32_t lag_ms = lag_s * 1000;
+        time_ms -= lag_ms;
+    }
+
+    accuracy_deg = state[instance].gps_yaw_accuracy;
+    return true;
+}
+#else
+bool AP_GPS::gps_yaw_deg(uint8_t instance, float &yaw_deg, float &accuracy_deg, uint32_t &time_ms) const
+{
+#if GPS_MAX_RECEIVERS > 1
+    if (instance < GPS_MAX_RECEIVERS &&
+        _type[instance] == GPS_TYPE_UBLOX_RTK_BASE &&
+        _type[instance^1] == GPS_TYPE_UBLOX_RTK_ROVER) {
+        // return the yaw from the rover
+        instance ^= 1;
+    }
+#endif
+    if (!have_gps_yaw(instance)) {
+        return false;
+    }
+    yaw_deg = state[instance].gps_yaw;
+
+    // get lagged timestamp
+    time_ms = state[instance].gps_yaw_time_ms;
+    float lag_s;
+    if (get_lag(instance, lag_s)) {
+        uint32_t lag_ms = lag_s * 1000;
+        time_ms -= lag_ms;
+    }
+
+    if (state[instance].have_gps_yaw_accuracy) {
+        accuracy_deg = state[instance].gps_yaw_accuracy;
+    } else {
+        // fall back to 10 degrees as a generic default
+        accuracy_deg = 10;
+    }
+    return true;
+}
+#endif
 
 namespace AP {
 

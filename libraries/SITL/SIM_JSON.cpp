@@ -184,6 +184,16 @@ uint16_t JSON::parse_sensors(const char *json)
                 break;
             }
 
+            case DATA_VECTOR3D: {
+                Vector3d *v = (Vector3d *)key.ptr;
+                if (sscanf(p, "[%lf, %lf, %lf]", &v->x, &v->y, &v->z) != 3) {
+                    printf("Failed to parse Vector3f for %s/%s\n", key.section, key.key);
+                    return received_bitmask;
+                }
+                //printf("%s/%s = %f, %f, %f\n", key.section, key.key, v->x, v->y, v->z);
+                break;
+            }
+
             case QUATERNION: {
                 Quaternion *v = static_cast<Quaternion*>(key.ptr);
                 if (sscanf(p, "[%f, %f, %f, %f]", &(v->q1), &(v->q2), &(v->q3), &(v->q4)) != 4) {
@@ -274,6 +284,7 @@ void JSON::recv_fdm(const struct sitl_input &input)
     gyro = state.imu.gyro;
     velocity_ef = state.velocity;
     position = state.position;
+    position.xy() += origin.get_distance_NE_double(home);
 
     // deal with euler or quaternion attitude
     if ((received_bitmask & QUAT_ATT) != 0) {
@@ -283,14 +294,21 @@ void JSON::recv_fdm(const struct sitl_input &input)
         dcm.from_euler(state.attitude[0], state.attitude[1], state.attitude[2]);
     }
 
-    // velocity relative to airmass in body frame
-    velocity_air_bf = dcm.transposed() * velocity_ef;
+    if ((received_bitmask & AIRSPEED)) {
+        // received airspeed directly
+        airspeed = state.airspeed;
 
-    // airspeed
-    airspeed = velocity_air_bf.length();
+        airspeed_pitot = state.airspeed;
+    } else {
+        // velocity relative to airmass in body frame
+        velocity_air_bf = dcm.transposed() * velocity_ef;
 
-    // airspeed as seen by a fwd pitot tube (limited to 120m/s)
-    airspeed_pitot = constrain_float(velocity_air_bf * Vector3f(1.0f, 0.0f, 0.0f), 0.0f, 120.0f);
+        // airspeed
+        airspeed = velocity_air_bf.length();
+
+        // airspeed as seen by a fwd pitot tube (limited to 120m/s)
+        airspeed_pitot = constrain_float(velocity_air_bf * Vector3f(1.0f, 0.0f, 0.0f), 0.0f, 120.0f);
+    }
 
     // Convert from a meters from origin physics to a lat long alt
     update_position();
