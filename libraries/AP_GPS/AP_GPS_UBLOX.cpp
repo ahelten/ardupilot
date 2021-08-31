@@ -81,12 +81,11 @@ AP_GPS_UBLOX::AP_GPS_UBLOX(AP_GPS &_gps, AP_GPS::GPS_State &_state, AP_HAL::UART
 
 #if GPS_MOVING_BASELINE
     if (role == AP_GPS::GPS_ROLE_MB_BASE && !mb_use_uart2()) {
-        if (!mb_disable_rtcm3()) {
-            rtcm3_parser = new RTCM3_Parser;
-            if (rtcm3_parser == nullptr) {
-                GCS_SEND_TEXT(MAV_SEVERITY_ERROR, "u-blox %d: failed RTCMv3 parser allocation", state.instance + 1);
-            }
-        } else {
+        rtcm3_parser = new RTCM3_Parser;
+        if (rtcm3_parser == nullptr) {
+            GCS_SEND_TEXT(MAV_SEVERITY_ERROR, "u-blox %d: failed RTCMv3 parser allocation", state.instance + 1);
+        }
+        if (mb_disable_rtcm3()) {
             GCS_SEND_TEXT(MAV_SEVERITY_INFO, "u-blox %d: RTCMv3 forwarding disabled", state.instance + 1);
         }
         _unconfigured_messages |= CONFIG_RTK_MOVBASE;
@@ -1463,7 +1462,6 @@ AP_GPS_UBLOX::_parse_gps(void)
         if(!haveHpposMsg){
             _check_new_itow(_buffer.pvt.itow);
             _last_pos_time        = _buffer.pvt.itow;
-            _last_pvt_itow        = _buffer.pvt.itow;
             state.location.lng    = _buffer.pvt.lon;
             state.location.lat    = _buffer.pvt.lat;
             state.location.alt    = _buffer.pvt.h_msl / 10;
@@ -1478,6 +1476,7 @@ AP_GPS_UBLOX::_parse_gps(void)
         state.num_sats    = _buffer.pvt.num_sv;
         // velocity
         _last_vel_time         = _buffer.pvt.itow;
+        _last_pvt_itow         = _buffer.pvt.itow;
         state.ground_speed     = _buffer.pvt.gspeed*0.001f;          // m/s
         state.ground_course    = wrap_360(_buffer.pvt.head_mot * 1.0e-5f);       // Heading 2D deg * 100000
         state.have_vertical_velocity = true;
@@ -1956,7 +1955,7 @@ void AP_GPS_UBLOX::_check_new_itow(uint32_t itow)
 bool AP_GPS_UBLOX::get_RTCMV3(const uint8_t *&bytes, uint16_t &len)
 {
 #if GPS_MOVING_BASELINE
-    if (rtcm3_parser) {
+    if (rtcm3_parser && !mb_disable_rtcm3()) {
         len = rtcm3_parser->get_len(bytes);
         return len > 0;
     }
