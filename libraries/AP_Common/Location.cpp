@@ -421,11 +421,25 @@ void Location::offset(ftype ofs_north, ftype ofs_east)
         hplng += 360e7;
     }
 
+# if !defined(ALLOW_DOUBLE_MATH_FUNCTIONS)
+    if (hplat < 0.0) {
+        lat = (int32_t)(hplat - 0.5);
+    } else {
+        lat = (int32_t)(hplat + 0.5);
+    }
+    if (hplng < 0.0) {
+        lng = (int32_t)(hplng - 0.5);
+    } else {
+        lng = (int32_t)(hplng + 0.5);
+    }
+# else
     lat = (int32_t)round(hplat);
-    lat_hp = (int8_t)((hplat - lat) * 100.0);
-
     lng = (int32_t)round(hplng);
+# endif
+
+    lat_hp = (int8_t)((hplat - lat) * 100.0);
     lng_hp = (int8_t)((hplng - lng) * 100.0);
+
 #else
     offset_latlng(lat, lng, ofs_north, ofs_east);
 #endif
