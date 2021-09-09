@@ -883,9 +883,6 @@ MAV_MISSION_RESULT AP_Mission::mavlink_int_to_mission_cmd(const mavlink_mission_
         acp = MIN(0xFF,acp);
 
         cmd.p1 = (passby << 8) | (acp & 0x00FF);
-#elif defined(INCLUDE_HIGH_PRECISION_GPS)
-        //JO: Remove delay option as param2 is used for GPS high precision
-        cmd.p1 = 0;
 #else
         // delay at waypoint in seconds (this is for copters???)
         cmd.p1 = packet.param1;
@@ -1168,15 +1165,16 @@ MAV_MISSION_RESULT AP_Mission::mavlink_int_to_mission_cmd(const mavlink_mission_
         cmd.content.location.alt = packet.z * 100.0f;       // convert packet's alt (m) to cmd alt (cm)
 
 #if defined(INCLUDE_HIGH_PRECISION_GPS)
-        //JO:
-        // Add high precision:
-        if(cmd.id==MAV_CMD_NAV_WAYPOINT){
-          uint16_t param1_bytes = packet.param1; // The extra two digits precision for the lat/long are encoded in param1
-          cmd.content.location.lat_hp = (param1_bytes & 0xFF) - 128; //Lower byte with 128 offset
-          cmd.content.location.lng_hp = ((param1_bytes >> 8) & 0x00FF) - 128; //Upper byte with 128 offset
-        } else { // No high precision information available
-          cmd.content.location.lat_hp = 0;
-          cmd.content.location.lng_hp = 0;
+        // Add high precision (moved from param1 to param4 because param1 was in use):
+        if (cmd.id == MAV_CMD_NAV_WAYPOINT) {
+          uint16_t param_bytes = packet.param4; // The extra two digits precision for lat/long are encoded here
+#if 0
+          // Original implementation had an unnecessary 128 offset, not sure why..
+          cmd.content.location.lat_hp = (param_bytes & 0xFF) - 128; //Lower byte with 128 offset
+          cmd.content.location.lng_hp = ((param_bytes >> 8) & 0x00FF) - 128; //Upper byte with 128 offset
+#endif
+          cmd.content.location.lat_hp = param_bytes & 0xFF;
+          cmd.content.location.lng_hp = (param_bytes >> 8) & 0x00FF;
         }
 #endif
 
@@ -1353,6 +1351,10 @@ bool AP_Mission::mission_cmd_to_mavlink_int(const AP_Mission::Mission_Command& c
 #else
         // delay at waypoint in seconds
         packet.param1 = cmd.p1;
+#endif
+#if defined(INCLUDE_HIGH_PRECISION_GPS)
+        // Slide lat/lng high precision fields into this param
+        packet.param4 = cmd.content.location.lat_hp | (cmd.content.location.lng_hp << 8);
 #endif
         break;
 
