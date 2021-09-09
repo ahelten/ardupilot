@@ -12,7 +12,7 @@
     LOG_GPS_UBX2_MSG
 
 
-#ifndef INCLUDE_HIGH_PRECISION_GPS
+#ifndef INCLUDE_HIGH_PRECISION_GPS_DISABLED
 // @LoggerMessage: GPS
 // @Description: Information received from GNSS systems attached to the autopilot
 // @Field: TimeUS: Time since system startup
@@ -262,7 +262,7 @@ struct PACKED log_GPS_RAWS {
     uint8_t trkStat;
 };
 
-#ifndef INCLUDE_HIGH_PRECISION_GPS
+#ifndef INCLUDE_HIGH_PRECISION_GPS_DISABLED
 #define LOG_STRUCTURE_FROM_GPS \
     { LOG_GPS_MSG, sizeof(log_GPS), \
       "GPS",  "QBBIHBcLLeffffB", "TimeUS,I,Status,GMS,GWk,NSats,HDop,Lat,Lng,Alt,Spd,GCrs,VZ,Yaw,U", "s#---SmDUmnhnh-", "F----0BGGB000--" }, \

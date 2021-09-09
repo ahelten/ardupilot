@@ -95,6 +95,7 @@ EXPECT_NEAR(v1[1], v2[1], acc);          \
 EXPECT_NEAR(v1[2], v2[2], acc);          \
 } while (false);
 
+#ifndef INCLUDE_HIGH_PRECISION_GPS
 TEST(Location, LatLngWrapping)
 {
     struct {
@@ -376,6 +377,319 @@ TEST(Location, Distance)
 
 }
 
+#else
+TEST(Location, LatLngWrapping)
+{
+    struct {
+        int32_t start_lat;
+        int8_t  start_lat_hp;
+        int32_t start_lng;
+        int8_t  start_lng_hp;
+        Vector2f delta_metres_ne;
+        int32_t expected_lat;
+        int8_t  expected_lat_hp;
+        int32_t expected_lng;
+        int8_t  expected_lng_hp;
+    } tests[] {
+        // Was: {519634000, 1797560000, Vector2f{0, 100000}, 519634000, -1787860775}
+        // "Expected longitude" is different when using hpposllh due to higher precision math
+        // causing longitude to be -1787860774 instead of -1787860775 >------------v
+        {519634000, 0, 1797560000, 0, Vector2f{0, 100000}, 519634000, 0, -1787860774, -17}
+    };
+
+    for (auto &test : tests) {
+        // forward
+        {
+            Location loc{test.start_lat, test.start_lng, test.start_lat_hp, test.start_lng_hp,
+                0, Location::AltFrame::ABOVE_HOME};
+            loc.offset(test.delta_metres_ne[0], test.delta_metres_ne[1]);
+            EXPECT_EQ(test.expected_lat, loc.lat);
+            EXPECT_EQ((int)test.expected_lat_hp, (int)loc.lat_hp);
+            EXPECT_EQ(test.expected_lng, loc.lng);
+            EXPECT_EQ((int)test.expected_lng_hp, (int)loc.lng_hp);
+            EXPECT_EQ(0, loc.alt);
+        }
+        // and now reverse
+        {
+            Location rev{test.expected_lat, test.expected_lng, test.expected_lat_hp,
+                test.expected_lng_hp, 0, Location::AltFrame::ABOVE_HOME};
+            rev.offset(-test.delta_metres_ne[0], -test.delta_metres_ne[1]);
+            EXPECT_EQ(rev.lat, test.start_lat);
+            EXPECT_EQ((int)rev.lat_hp, (int)test.start_lat_hp);
+            EXPECT_EQ(rev.lng, test.start_lng);
+            EXPECT_EQ((int)rev.lng_hp, (int)test.start_lng_hp);
+            EXPECT_EQ(0, rev.alt);
+        }
+    }
+}
+
+TEST(Location, LocOffsetDouble)
+{
+    struct {
+        int32_t home_lat;
+        int32_t home_lng;
+        Vector2d delta_metres_ne1;
+        Vector2d delta_metres_ne2;
+        Vector2d expected_pos_change;
+    } tests[] {
+               -353632620, 1491652373,
+               Vector2d{4682795.4576701336, 5953662.7673837934},
+               Vector2d{4682797.1904749088, 5953664.1586009059},
+               // Was: Vector2d{1.7365739867091179,1.2050807},
+               Vector2d{1.7327892,1.2138149},
+    };
+
+    for (auto &test : tests) {
+        Location home{test.home_lat, test.home_lng, 0, Location::AltFrame::ABOVE_HOME};
+        Location loc1 = home;
+        Location loc2 = home;
+        loc1.offset(test.delta_metres_ne1.x, test.delta_metres_ne1.y);
+        loc2.offset(test.delta_metres_ne2.x, test.delta_metres_ne2.y);
+        Vector2d diff = loc1.get_distance_NE_double(loc2);
+        EXPECT_FLOAT_EQ(diff.x, test.expected_pos_change.x);
+        EXPECT_FLOAT_EQ(diff.y, test.expected_pos_change.y);
+    }
+}
+
+TEST(Location, Tests)
+{
+    Location test_location;
+    EXPECT_TRUE(test_location.is_zero());
+    EXPECT_FALSE(test_location.initialised());
+    const Location test_home{-35362938, 149165085, 100, Location::AltFrame::ABSOLUTE};
+    EXPECT_EQ(-35362938, test_home.lat);
+    EXPECT_EQ(149165085, test_home.lng);
+    EXPECT_EQ(100, test_home.alt);
+    EXPECT_EQ(0, test_home.relative_alt);
+    EXPECT_EQ(0, test_home.terrain_alt);
+    EXPECT_EQ(0, test_home.origin_alt);
+    EXPECT_EQ(0, test_home.loiter_ccw);
+    EXPECT_EQ(0, test_home.loiter_xtrack);
+    EXPECT_TRUE(test_home.initialised());
+
+    const Vector3f test_vect{-42, 42, 0};
+    Location test_location3{test_vect, Location::AltFrame::ABOVE_HOME};
+    EXPECT_EQ(0, test_location3.lat);
+    EXPECT_EQ(0, test_location3.lng);
+    EXPECT_EQ(0, test_location3.alt);
+    EXPECT_EQ(1, test_location3.relative_alt);
+    EXPECT_EQ(0, test_location3.terrain_alt);
+    EXPECT_EQ(0, test_location3.origin_alt);
+    EXPECT_EQ(0, test_location3.loiter_ccw);
+    EXPECT_EQ(0, test_location3.loiter_xtrack);
+    EXPECT_FALSE(test_location3.initialised());
+    // EXPECT_EXIT(test_location3.change_alt_frame(Location::AltFrame::ABSOLUTE), PANIC something); // TODO check PANIC
+
+    test_location3.set_alt_cm(-420, Location::AltFrame::ABSOLUTE);
+    EXPECT_EQ(-420, test_location3.alt);
+    EXPECT_EQ(0, test_location3.relative_alt);
+    EXPECT_EQ(0, test_location3.terrain_alt);
+    EXPECT_EQ(0, test_location3.origin_alt);
+    EXPECT_EQ(Location::AltFrame::ABSOLUTE, test_location3.get_alt_frame());
+
+    test_location3.set_alt_cm(420, Location::AltFrame::ABOVE_HOME);
+    EXPECT_EQ(420, test_location3.alt);
+    EXPECT_EQ(1, test_location3.relative_alt);
+    EXPECT_EQ(0, test_location3.terrain_alt);
+    EXPECT_EQ(0, test_location3.origin_alt);
+    EXPECT_EQ(Location::AltFrame::ABOVE_HOME, test_location3.get_alt_frame());
+
+    test_location3.set_alt_cm(-420, Location::AltFrame::ABOVE_ORIGIN);
+    EXPECT_EQ(-420, test_location3.alt);
+    EXPECT_EQ(0, test_location3.relative_alt);
+    EXPECT_EQ(0, test_location3.terrain_alt);
+    EXPECT_EQ(1, test_location3.origin_alt);
+    EXPECT_EQ(Location::AltFrame::ABOVE_ORIGIN, test_location3.get_alt_frame());
+
+    test_location3.set_alt_cm(420, Location::AltFrame::ABOVE_TERRAIN);
+    EXPECT_EQ(420, test_location3.alt);
+    EXPECT_EQ(1, test_location3.relative_alt);
+    EXPECT_EQ(1, test_location3.terrain_alt);
+    EXPECT_EQ(0, test_location3.origin_alt);
+    EXPECT_EQ(Location::AltFrame::ABOVE_TERRAIN, test_location3.get_alt_frame());
+
+    // No TERRAIN, NO HOME, NO ORIGIN
+    for (auto current_frame = Location::AltFrame::ABSOLUTE;
+         current_frame <= Location::AltFrame::ABOVE_TERRAIN;
+         current_frame = static_cast<Location::AltFrame>(
+                 (uint8_t) current_frame + 1)) {
+        for (auto desired_frame = Location::AltFrame::ABSOLUTE;
+             desired_frame <= Location::AltFrame::ABOVE_TERRAIN;
+             desired_frame = static_cast<Location::AltFrame>(
+                     (uint8_t) desired_frame + 1)) {
+            test_location3.set_alt_cm(420, current_frame);
+            if (current_frame == desired_frame) {
+                EXPECT_TRUE(test_location3.change_alt_frame(desired_frame));
+                continue;
+            }
+            if (current_frame == Location::AltFrame::ABOVE_TERRAIN
+                    || desired_frame == Location::AltFrame::ABOVE_TERRAIN) {
+                EXPECT_FALSE(test_location3.change_alt_frame(desired_frame));
+            } else if (current_frame == Location::AltFrame::ABOVE_ORIGIN
+                    || desired_frame == Location::AltFrame::ABOVE_ORIGIN) {
+                EXPECT_FALSE(test_location3.change_alt_frame(desired_frame));
+            } else if (current_frame == Location::AltFrame::ABOVE_HOME
+                    || desired_frame == Location::AltFrame::ABOVE_HOME) {
+                EXPECT_FALSE(test_location3.change_alt_frame(desired_frame));
+            } else {
+                EXPECT_TRUE(test_location3.change_alt_frame(desired_frame));
+            }
+        }
+    }
+    // NO TERRAIN, NO ORIGIN
+    EXPECT_TRUE(vehicle.ahrs.set_home(test_home));
+    for (auto current_frame = Location::AltFrame::ABSOLUTE;
+         current_frame <= Location::AltFrame::ABOVE_TERRAIN;
+         current_frame = static_cast<Location::AltFrame>(
+                 (uint8_t) current_frame + 1)) {
+        for (auto desired_frame = Location::AltFrame::ABSOLUTE;
+             desired_frame <= Location::AltFrame::ABOVE_TERRAIN;
+             desired_frame = static_cast<Location::AltFrame>(
+                     (uint8_t) desired_frame + 1)) {
+            test_location3.set_alt_cm(420, current_frame);
+            if (current_frame == desired_frame) {
+                EXPECT_TRUE(test_location3.change_alt_frame(desired_frame));
+                continue;
+            }
+            if (current_frame == Location::AltFrame::ABOVE_TERRAIN
+                    || desired_frame == Location::AltFrame::ABOVE_TERRAIN) {
+                EXPECT_FALSE(test_location3.change_alt_frame(desired_frame));
+            } else if (current_frame == Location::AltFrame::ABOVE_ORIGIN
+                    || desired_frame == Location::AltFrame::ABOVE_ORIGIN) {
+                EXPECT_FALSE(test_location3.change_alt_frame(desired_frame));
+            } else {
+                EXPECT_TRUE(test_location3.change_alt_frame(desired_frame));
+            }
+
+        }
+    }
+    // NO Origin
+    Location::set_terrain(&vehicle.terrain);
+    for (auto current_frame = Location::AltFrame::ABSOLUTE;
+         current_frame <= Location::AltFrame::ABOVE_TERRAIN;
+         current_frame = static_cast<Location::AltFrame>(
+                 (uint8_t) current_frame + 1)) {
+        for (auto desired_frame = Location::AltFrame::ABSOLUTE;
+             desired_frame <= Location::AltFrame::ABOVE_TERRAIN;
+             desired_frame = static_cast<Location::AltFrame>(
+                     (uint8_t) desired_frame + 1)) {
+            test_location3.set_alt_cm(420, current_frame);
+            if (current_frame == desired_frame) {
+                EXPECT_TRUE(test_location3.change_alt_frame(desired_frame));
+                continue;
+            }
+            if (current_frame == Location::AltFrame::ABOVE_ORIGIN
+                    || desired_frame == Location::AltFrame::ABOVE_ORIGIN) {
+                EXPECT_FALSE(test_location3.change_alt_frame(desired_frame));
+            } else {
+                EXPECT_TRUE(test_location3.change_alt_frame(desired_frame));
+            }
+        }
+    }
+
+    Vector2f test_vec2;
+    EXPECT_FALSE(test_home.get_vector_xy_from_origin_NE(test_vec2));
+    Vector3f test_vec3;
+    EXPECT_FALSE(test_home.get_vector_from_origin_NEU(test_vec3));
+
+    Location test_origin = test_home;
+    test_origin.offset(2, 2);
+    EXPECT_TRUE(vehicle.ahrs.set_origin(test_origin));
+    const Vector3f test_vecto{200, 200, 10};
+    const Location test_location4{test_vecto, Location::AltFrame::ABOVE_ORIGIN};
+    // Was:  EXPECT_EQ(-35362580, test_location4.lat);
+    EXPECT_EQ(-35362579, test_location4.lat);
+    EXPECT_EQ((int)33, (int)test_location4.lat_hp);
+    EXPECT_EQ(149165445, test_location4.lng);
+    EXPECT_EQ((int)0, (int)test_location4.lng_hp);
+    EXPECT_EQ(10, test_location4.alt);
+    EXPECT_EQ(0, test_location4.relative_alt);
+    EXPECT_EQ(0, test_location4.terrain_alt);
+    EXPECT_EQ(1, test_location4.origin_alt);
+    EXPECT_EQ(0, test_location4.loiter_ccw);
+    EXPECT_EQ(0, test_location4.loiter_xtrack);
+    EXPECT_TRUE(test_location4.initialised());
+
+    for (auto current_frame = Location::AltFrame::ABSOLUTE;
+         current_frame <= Location::AltFrame::ABOVE_TERRAIN;
+         current_frame = static_cast<Location::AltFrame>(
+                 (uint8_t) current_frame + 1)) {
+        for (auto desired_frame = Location::AltFrame::ABSOLUTE;
+             desired_frame <= Location::AltFrame::ABOVE_TERRAIN;
+             desired_frame = static_cast<Location::AltFrame>(
+                     (uint8_t) desired_frame + 1)) {
+            test_location3.set_alt_cm(420, current_frame);
+            EXPECT_TRUE(test_location3.change_alt_frame(desired_frame));
+        }
+    }
+    EXPECT_TRUE(test_home.get_vector_xy_from_origin_NE(test_vec2));
+    const float ACCURACY = 1; // TODO: WTF : 1m accuracy ? [Maybe not, are the units in cm?]
+    EXPECT_VECTOR2F_NEAR(Vector2f(-200, -200), test_vec2, ACCURACY);
+    EXPECT_TRUE(test_home.get_vector_from_origin_NEU(test_vec3));
+    EXPECT_VECTOR2F_NEAR(Vector3f(-200, -200, 0), test_vec3, ACCURACY);
+    vehicle.ahrs.unset_home();
+    const Location test_location_empty{test_vect, Location::AltFrame::ABOVE_HOME};
+    EXPECT_FALSE(test_location_empty.get_vector_from_origin_NEU(test_vec3));
+}
+
+TEST(Location, Distance)
+{
+    const Location test_home{-35362938, 149165085, 100, Location::AltFrame::ABSOLUTE};
+    const Location test_home2{-35363938, 149165085, 100, Location::AltFrame::ABSOLUTE};
+    EXPECT_FLOAT_EQ(11.131885, test_home.get_distance(test_home2));
+    EXPECT_FLOAT_EQ(0, test_home.get_distance(test_home));
+    EXPECT_VECTOR2F_EQ(Vector2f(0, 0), test_home.get_distance_NE(test_home));
+    EXPECT_VECTOR2F_EQ(Vector2f(-11.131885, 0), test_home.get_distance_NE(test_home2));
+    EXPECT_VECTOR2F_EQ(Vector3f(0, 0, 0), test_home.get_distance_NED(test_home));
+    EXPECT_VECTOR2F_EQ(Vector3f(-11.131885, 0, 0), test_home.get_distance_NED(test_home2));
+    Location test_loc = test_home;
+    test_loc.offset(-11.131885, 0);
+    EXPECT_TRUE(test_loc.same_latlon_as(test_home2));
+    test_loc.offset_bearing(0, 11.131885);
+    EXPECT_TRUE(test_loc.same_latlon_as(test_home));
+
+    // Was: test_loc.offset_bearing_and_pitch(0, 2, -11.14);
+    //
+    // I believe the reason for this minor difference is simply higher accuracy in calculations
+    // that were eliminated by rounding in the non-hpposllh implementation.
+    test_loc.offset_bearing_and_pitch(0, 2, -11.1386);
+    EXPECT_TRUE(test_loc.same_latlon_as(test_home2));
+    EXPECT_EQ(62, test_loc.alt);
+
+    test_loc = Location(-35362633, 149165085, 0, Location::AltFrame::ABOVE_HOME);
+    int32_t bearing = test_home.get_bearing_to(test_loc);
+    EXPECT_EQ(0, bearing);
+
+    test_loc = Location(-35363711, 149165085, 0, Location::AltFrame::ABOVE_HOME);
+    bearing = test_home.get_bearing_to(test_loc);
+    EXPECT_EQ(18000, bearing);
+
+    test_loc = Location(-35362938, 149166085, 0, Location::AltFrame::ABOVE_HOME);
+    bearing = test_home.get_bearing_to(test_loc);
+    EXPECT_EQ(9000, bearing);
+
+    test_loc = Location(-35362938, 149164085, 0, Location::AltFrame::ABOVE_HOME);
+    bearing = test_home.get_bearing_to(test_loc);
+    EXPECT_EQ(27000, bearing);
+
+    test_loc = Location(-35361938, 149164085, 0, Location::AltFrame::ABOVE_HOME);
+    bearing = test_home.get_bearing_to(test_loc);
+    EXPECT_EQ(31503, bearing);
+    const float bearing_rad = test_home.get_bearing(test_loc);
+    EXPECT_FLOAT_EQ(radians(315.03), bearing_rad);
+
+}
+
+TEST(Location, DistanceHpposllh)
+{
+    // 37.618986611, -97.754114544 and 37.618986611, -97.754114555
+    const Location test_home{376189866, -977541145, 11, 44, 0, Location::AltFrame::ABSOLUTE};
+    const Location test_home2{376189866, -977541145, 11, 55, 0, Location::AltFrame::ABSOLUTE};
+    EXPECT_FLOAT_EQ(0.00096991588, test_home.get_distance(test_home2));
+    EXPECT_FLOAT_EQ(0, test_home.get_distance(test_home));
+}
+#endif
+
 TEST(Location, Sanitize)
 {
     const Location test_home{-35362938, 149165085, 100, Location::AltFrame::ABSOLUTE};
@@ -416,14 +730,14 @@ TEST(Location, Line)
 TEST(Location, OffsetError)
 {
     // test at 10km from origin
-    const float ofs_ne = 10e3 / sqrtf(2.0);
+    const ftype ofs_ne = 10e3 / sqrtf(2.0);
     for (float lat = -80; lat <= 80; lat += 10.0) {
         Location origin{int32_t(lat*1e7), 0, 0, Location::AltFrame::ABOVE_HOME};
         Location loc = origin;
         loc.offset(ofs_ne, ofs_ne);
         Location loc2 = loc;
         loc2.offset(-ofs_ne, -ofs_ne);
-        float dist = origin.get_distance(loc2);
+        ftype dist = origin.get_distance(loc2);
         EXPECT_FLOAT_EQ(dist, 0);
     }
 }

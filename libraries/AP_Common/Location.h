@@ -4,7 +4,7 @@
 
 class AP_Terrain;
 
-//#define INCLUDE_HIGH_PRECISION_GPS
+#define INCLUDE_HIGH_PRECISION_GPS
 
 #define LOCATION_ALT_MAX_M  83000   // maximum altitude (in meters) that can be fit into Location structure's alt field
 
@@ -81,7 +81,9 @@ public:
     Vector2F get_distance_NE_ftype(const Location &loc2) const;
 
     // extrapolate latitude/longitude given distances (in meters) north and east
+#ifndef INCLUDE_HIGH_PRECISION_GPS
     static void offset_latlng(int32_t &lat, int32_t &lng, ftype ofs_north, ftype ofs_east);
+#endif
     void offset(ftype ofs_north, ftype ofs_east);
 
     // extrapolate latitude/longitude given bearing and distance

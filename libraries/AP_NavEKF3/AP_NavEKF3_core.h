@@ -516,7 +516,11 @@ private:
     };
 
     struct gps_elements : EKF_obs_element_t {
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+        Location    pos;            // latitude and longitude in 1e7 (or 1e9) degrees
+#else
         int32_t     lat, lng;       // latitude and longitude in 1e7 degrees
+#endif
         ftype       hgt;            // height of the GPS antenna in local NED earth frame (m)
         Vector3F    vel;            // velocity of the GPS antenna in local NED earth frame (m/sec)
         uint8_t     sensor_idx;     // unique integer identifying the GPS sensor

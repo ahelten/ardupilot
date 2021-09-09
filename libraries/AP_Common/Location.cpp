@@ -58,6 +58,10 @@ Location::Location(const Vector3f &ekf_offset_neu, AltFrame frame)
     if (AP::ahrs().get_origin(ekf_origin)) {
         lat = ekf_origin.lat;
         lng = ekf_origin.lng;
+        // INCLUDE_HIGH_PRECISION_GPS -- might as well leave these enabled since the "_hp" fields are enabled
+        lat_hp = ekf_origin.lat_hp;
+        lng_hp = ekf_origin.lng_hp;
+
         offset(ekf_offset_neu.x * 0.01, ekf_offset_neu.y * 0.01);
     }
 }
@@ -226,10 +230,9 @@ bool Location::get_vector_xy_from_origin_NE(Vector2f &vec_ne) const
     }
 
 #ifdef INCLUDE_HIGH_PRECISION_GPS
-# error Validate this update for high-precision support!!!!
     vec_ne = get_distance_NE(ekf_origin);
-    vec_ne.x *= -1;
-    vec_ne.y *= -1;
+    vec_ne.x *= -100; // invert and convert to cm
+    vec_ne.y *= -100; // invert and convert to cm
 #else
     vec_ne.x = (lat-ekf_origin.lat) * LATLON_TO_CM;
     vec_ne.y = diff_longitude(lng,ekf_origin.lng) * LATLON_TO_CM * longitude_scale((lat+ekf_origin.lat)/2);
@@ -261,9 +264,8 @@ bool Location::get_vector_from_origin_NEU(Vector3f &vec_neu) const
 ftype Location::get_distance(const struct Location &loc2) const
 {
 #ifdef INCLUDE_HIGH_PRECISION_GPS
-# error Validate this update for high-precision support!!!!
-  Vector2f vec_ne = get_distance_NE(loc2);
-  return vec_ne.length();
+    Vector2f vec_ne = get_distance_NE(loc2);
+    return vec_ne.length();
 #else
     ftype dlat = (ftype)(loc2.lat - lat);
     ftype dlng = ((ftype)diff_longitude(loc2.lng,lng)) * longitude_scale((lat+loc2.lat)/2);
@@ -279,31 +281,24 @@ ftype Location::get_distance(const struct Location &loc2) const
 Vector2f Location::get_distance_NE(const Location &loc2) const
 {
 #ifdef INCLUDE_HIGH_PRECISION_GPS
-# error Validate this update for high-precision support!!!!
-  const double loc1_lat_hp = (double)lat + (lat_hp / 100.0);
-  const double loc1_lng_hp = (double)lng + (lng_hp / 100.0);
-  const double loc2_lat_hp = (double)loc2.lat + (loc2.lat_hp / 100.0);
-  const double loc2_lng_hp = (double)loc2.lng + (loc2.lng_hp / 100.0);
+    const double loc1_lat_hp = (double)lat + (lat_hp / 100.0);
+    const double loc1_lng_hp = (double)lng + (lng_hp / 100.0);
+    const double loc2_lat_hp = (double)loc2.lat + (loc2.lat_hp / 100.0);
+    const double loc2_lng_hp = (double)loc2.lng + (loc2.lng_hp / 100.0);
 
-  double dlat = loc2_lat_hp - loc1_lat_hp;
-  double dlng = loc2_lng_hp - loc1_lng_hp;
-  if (dlng > 180.0) {
-      dlng -= 360.0;
-  }
-  else if (dlng < -180.0) {
-      dlng += 360.0;
-  }
-#if 0
-  // this was the original implementation that used different consts for LAT and LNG, need
-  // to deteermine which approach is more accurate.
-  dlat *= LOCATION_SCALING_FACTOR_LAT;
-  dlng *= LOCATION_SCALING_FACTOR_LNG * longitude_scale((loc2.lat+lat)/2);
-#else
-  dlat *= LOCATION_SCALING_FACTOR;
-  dlng *= LOCATION_SCALING_FACTOR * longitude_scale((loc2.lat+lat)/2);
-#endif
+    double dlat = loc2_lat_hp - loc1_lat_hp;
+    double dlng = loc2_lng_hp - loc1_lng_hp;
+    if (dlng > 180e7) {
+        dlng -= 360e7;
+    }
+    else if (dlng < -180e7) {
+        dlng += 360e7;
+    }
 
-  return Vector2f(float(dlat), float(dlng));
+    dlat *= double(LOCATION_SCALING_FACTOR);
+    dlng *= double(LOCATION_SCALING_FACTOR) * longitude_scale((loc2.lat+lat)/2);
+
+    return Vector2f(float(dlat), float(dlng));
 #else
   return Vector2f((loc2.lat - lat) * LOCATION_SCALING_FACTOR,
                   diff_longitude(loc2.lng,lng) * LOCATION_SCALING_FACTOR * longitude_scale((loc2.lat+lat)/2));
@@ -314,9 +309,8 @@ Vector2f Location::get_distance_NE(const Location &loc2) const
 Vector3f Location::get_distance_NED(const Location &loc2) const
 {
 #ifdef INCLUDE_HIGH_PRECISION_GPS
-# error Validate this update for high-precision support!!!!
     Vector2f vec_ne = get_distance_NE(loc2);
-    return Vector3f(vec_ne.x, vec_ne.y, (alt - loc2.alt) * 0.01f);
+    return Vector3f(vec_ne.x, vec_ne.y, (alt - loc2.alt) * 0.01);
 #else
     return Vector3f((loc2.lat - lat) * LOCATION_SCALING_FACTOR,
                     diff_longitude(loc2.lng,lng) * LOCATION_SCALING_FACTOR * longitude_scale((lat+loc2.lat)/2),
@@ -328,7 +322,8 @@ Vector3f Location::get_distance_NED(const Location &loc2) const
 Vector3d Location::get_distance_NED_double(const Location &loc2) const
 {
 #ifdef INCLUDE_HIGH_PRECISION_GPS
-# error Update this for high-precision support!!!!
+    Vector2d vec_ne = get_distance_NE_double(loc2);
+    return Vector3d(vec_ne.x, vec_ne.y, (alt - loc2.alt) * 0.01);
 #else
     return Vector3d((loc2.lat - lat) * double(LOCATION_SCALING_FACTOR),
                     diff_longitude(loc2.lng,lng) * LOCATION_SCALING_FACTOR * longitude_scale((lat+loc2.lat)/2),
@@ -338,20 +333,59 @@ Vector3d Location::get_distance_NED_double(const Location &loc2) const
 
 Vector2d Location::get_distance_NE_double(const Location &loc2) const
 {
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+    const double loc1_lat_hp = (double)lat + (lat_hp / 100.0);
+    const double loc1_lng_hp = (double)lng + (lng_hp / 100.0);
+    const double loc2_lat_hp = (double)loc2.lat + (loc2.lat_hp / 100.0);
+    const double loc2_lng_hp = (double)loc2.lng + (loc2.lng_hp / 100.0);
+
+    double dlat = loc2_lat_hp - loc1_lat_hp;
+    double dlng = loc2_lng_hp - loc1_lng_hp;
+    if (dlng > 180e7) {
+        dlng -= 360e7;
+    }
+    else if (dlng < -180e7) {
+        dlng += 360e7;
+    }
+
+    dlat *= double(LOCATION_SCALING_FACTOR);
+    dlng *= double(LOCATION_SCALING_FACTOR) * longitude_scale((loc2.lat+lat)/2);
+
+    return Vector2d(dlat, dlng);
+#else
     return Vector2d((loc2.lat - lat) * double(LOCATION_SCALING_FACTOR),
                     diff_longitude(loc2.lng,lng) * double(LOCATION_SCALING_FACTOR) * longitude_scale((lat+loc2.lat)/2));
+#endif
 }
 
 Vector2F Location::get_distance_NE_ftype(const Location &loc2) const
 {
 #ifdef INCLUDE_HIGH_PRECISION_GPS
-# error Update this for high-precision support!!!!
+    const double loc1_lat_hp = (double)lat + (double)(lat_hp / 100.0);
+    const double loc1_lng_hp = (double)lng + (double)(lng_hp / 100.0);
+    const double loc2_lat_hp = (double)loc2.lat + (double)(loc2.lat_hp / 100.0);
+    const double loc2_lng_hp = (double)loc2.lng + (double)(loc2.lng_hp / 100.0);
+
+    double dlat = loc2_lat_hp - loc1_lat_hp;
+    double dlng = loc2_lng_hp - loc1_lng_hp;
+    if (dlng > 180e7) {
+        dlng -= 360e7;
+    }
+    else if (dlng < -180e7) {
+        dlng += 360e7;
+    }
+
+    dlat *= double(LOCATION_SCALING_FACTOR);
+    dlng *= double(LOCATION_SCALING_FACTOR) * longitude_scale((loc2.lat+lat)/2);
+
+    return Vector2F(ftype(dlat), ftype(dlng));
 #else
     return Vector2F((loc2.lat - lat) * ftype(LOCATION_SCALING_FACTOR),
                     diff_longitude(loc2.lng,lng) * ftype(LOCATION_SCALING_FACTOR) * longitude_scale((lat+loc2.lat)/2));
 #endif
 }
 
+#ifndef INCLUDE_HIGH_PRECISION_GPS
 // extrapolate latitude/longitude given distances (in meters) north and east
 void Location::offset_latlng(int32_t &lat, int32_t &lng, ftype ofs_north, ftype ofs_east)
 {
@@ -361,14 +395,14 @@ void Location::offset_latlng(int32_t &lat, int32_t &lng, ftype ofs_north, ftype 
     lat = limit_lattitude(lat);
     lng = wrap_longitude(dlng+lng);
 }
+#endif
 
 // extrapolate latitude/longitude given distances (in meters) north and east
 void Location::offset(ftype ofs_north, ftype ofs_east)
 {
 #ifdef INCLUDE_HIGH_PRECISION_GPS
-# error Validate this update for high-precision support!!!!
-    double dlat = (ofs_north * LOCATION_SCALING_FACTOR_LAT_INV);
-    double dlng = ((ofs_east * LOCATION_SCALING_FACTOR_LNG_INV) / longitude_scale(lat));
+    double dlat = ofs_north * LOCATION_SCALING_FACTOR_INV;
+    double dlng = (ofs_east * LOCATION_SCALING_FACTOR_INV) / longitude_scale(lat+dlat/2);
     double hplat = (double)lat + (lat_hp / 100.0);
     double hplng = (double)lng + (lng_hp / 100.0);
 
@@ -381,22 +415,17 @@ void Location::offset(ftype ofs_north, ftype ofs_east)
         hplat += 90e7;
     }
     if (hplng > 180e7) {
-        hplng -= 180e7;
+        hplng -= 360e7;
     }
     else if (hplng < -180e7) {
-        hplng += 180e7;
+        hplng += 360e7;
     }
 
-    double intpart;
-    double fractpart;
+    lat = (int32_t)round(hplat);
+    lat_hp = (int8_t)((hplat - lat) * 100.0);
 
-    fractpart = modf(hplat, &intpart);
-    lat = (int32_t)intpart;
-    lat_hp = (int8_t)(fractpart * 100.0);
-
-    fractpart = modf(hplng, &intpart);
-    lng = (int32_t)intpart;
-    lng_hp = (int8_t)(fractpart * 100.0);
+    lng = (int32_t)round(hplng);
+    lng_hp = (int8_t)((hplng - lng) * 100.0);
 #else
     offset_latlng(lat, lng, ofs_north, ofs_east);
 #endif

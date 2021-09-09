@@ -690,8 +690,12 @@ void NavEKF3_core::readGpsData()
 
     // convert GPS measurements to local NED and save to buffer to be fused later if we have a valid origin
     if (validOrigin) {
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+        gpsDataNew.pos = gpsloc;
+#else
         gpsDataNew.lat = gpsloc.lat;
         gpsDataNew.lng = gpsloc.lng;
+#endif
         if ((frontend->_originHgtMode & (1<<2)) == 0) {
             gpsDataNew.hgt = (ftype)((double)0.01 * (double)gpsloc.alt - ekfGpsRefHgt);
         } else {

@@ -1939,7 +1939,7 @@ void AP_GPS::Write_GPS(uint8_t i)
     uint32_t yaw_time_ms;
     gps_yaw_deg(i, yaw_deg, yaw_accuracy_deg, yaw_time_ms);
 
-#ifndef INCLUDE_HIGH_PRECISION_GPS
+#ifndef INCLUDE_HIGH_PRECISION_GPS_DISABLED
     const struct log_GPS pkt {
         LOG_PACKET_HEADER_INIT(LOG_GPS_MSG),
         time_us       : time_us,
@@ -1984,7 +1984,7 @@ void AP_GPS::Write_GPS(uint8_t i)
     horizontal_accuracy(i, hacc);
     vertical_accuracy(i, vacc);
     speed_accuracy(i, sacc);
-#ifndef INCLUDE_HIGH_PRECISION_GPS
+#ifndef INCLUDE_HIGH_PRECISION_GPS_DISABLED
     struct log_GPA pkt2{
         LOG_PACKET_HEADER_INIT(LOG_GPA_MSG),
         time_us       : time_us,

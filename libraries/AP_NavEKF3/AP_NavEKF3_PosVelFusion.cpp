@@ -96,8 +96,12 @@ void NavEKF3_core::ResetPosition(resetDataSource posResetSource)
             // record the ID of the GPS for the data we are using for the reset
             last_gps_idx = gps_corrected.sensor_idx;
             // calculate position
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+            stateStruct.position.xy() = EKF_origin.get_distance_NE_ftype(gps_corrected.pos);
+#else
             const Location gpsloc{gps_corrected.lat, gps_corrected.lng, 0, Location::AltFrame::ABSOLUTE};
             stateStruct.position.xy() = EKF_origin.get_distance_NE_ftype(gpsloc);
+#endif
             // compensate for offset  between last GPS measurement and the EKF time horizon. Note that this is an unusual
             // time delta in that it can be both -ve and +ve
             const int32_t tdiff = imuDataDelayed.time_ms - gps_corrected.time_ms;
@@ -339,7 +343,11 @@ void NavEKF3_core::CorrectGPSForAntennaOffset(gps_elements &gps_data) const
     gps_data.vel -= velOffsetEarth;
 
     Vector3F posOffsetEarth = prevTnb.mul_transpose(posOffsetBody);
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+    gps_data.pos.offset(-posOffsetEarth.x, -posOffsetEarth.y);
+#else
     Location::offset_latlng(gps_data.lat, gps_data.lng, -posOffsetEarth.x, -posOffsetEarth.y);
+#endif
     gps_data.hgt += posOffsetEarth.z;
 }
 
@@ -484,8 +492,12 @@ void NavEKF3_core::SelectVelPosFusion()
             velPosObs[1] = gpsDataDelayed.vel.y;
             velPosObs[2] = gpsDataDelayed.vel.z;
         }
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+        const Vector2F posxy = EKF_origin.get_distance_NE_ftype(gpsDataDelayed.pos);
+#else
         const Location gpsloc{gpsDataDelayed.lat, gpsDataDelayed.lng, 0, Location::AltFrame::ABSOLUTE};
         const Vector2F posxy = EKF_origin.get_distance_NE_ftype(gpsloc);
+#endif
         velPosObs[3] = posxy.x;
         velPosObs[4] = posxy.y;
 #if EK3_FEATURE_EXTERNAL_NAV
@@ -526,8 +538,12 @@ void NavEKF3_core::SelectVelPosFusion()
         last_gps_idx = gpsDataDelayed.sensor_idx;
 
         // reset the position to the GPS position
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+        const Vector2F posxy = EKF_origin.get_distance_NE_ftype(gpsDataDelayed.pos);
+#else
         const Location gpsloc{gpsDataDelayed.lat, gpsDataDelayed.lng, 0, Location::AltFrame::ABSOLUTE};
         const Vector2F posxy = EKF_origin.get_distance_NE_ftype(gpsloc);
+#endif
         ResetPositionNE(posxy.x, posxy.y);
 
         // If we are also using GPS as the height reference, reset the height
