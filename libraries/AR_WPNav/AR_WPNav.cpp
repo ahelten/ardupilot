@@ -88,7 +88,7 @@ const AP_Param::GroupInfo AR_WPNav::var_info[] = {
 
 #ifdef INCLUDE_JO_WPNAV_CHANGES
 #error Update the parmeter numbers so they do not conflict with any new params!
-    // @Param: SLOW_LIMIT
+    // @<DISABLED>Param: SLOW_LIMIT
     // @DisplayName: Waypoint slow limit
     // @Description: Vehicle will not slow down when greater than this distance from the next WP.
     // @Units: m
@@ -97,19 +97,17 @@ const AP_Param::GroupInfo AR_WPNav::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("SLOW_LIMIT", 7, AR_WPNav, _slow_limit, AR_WPNAV_SLOW_LIMIT_DEFAULT),
 
-    // @Param: SLOW_RATE
+    // @<DISABLED>Param: SLOW_RATE
     // @DisplayName: Waypoint slow rate
     // @Description: Slow down quicker by this rate when approaching the next WP.
-    // @Units: 1
     // @Range: 0 1
     // @Increment: 0.1
     // @User: Standard
     AP_GROUPINFO("SLOW_RATE", 8, AR_WPNav, _slow_rate, 1),
 
-    // @Param: CORNER_RATE
+    // @<DISABLED>Param: CORNER_RATE
     // @DisplayName: Waypoint corner rate
     // @Description: Vehicle will increase lateral accel by this factor when within WP_SLOW_LIMIT.
-    // @Units: 1
     // @Range: 0 1
     // @Increment: 0.1
     // @User: Standard

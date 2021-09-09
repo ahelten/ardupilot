@@ -75,7 +75,7 @@ struct PACKED log_GPA {
     uint16_t delta_ms;
 };
 #else
-// @LoggerMessage: GPS
+// @<DISABLED>LoggerMessage: GPS
 // @Description: Information received from GNSS systems attached to the autopilot
 // @Field: TimeUS: Time since system startup
 // @Field: I: GPS instance number
@@ -109,7 +109,7 @@ struct PACKED log_GPS {
     uint8_t  used;
 };
 
-// @LoggerMessage: GPA
+// @<DISABLED>LoggerMessage: GPA
 // @Description: GPS accuracy information
 // @Field: TimeUS: Time since system startup
 // @Field: I: GPS instance number
