@@ -1133,7 +1133,20 @@ void NavEKF3_core::update_gps_selection(void)
 {
     const auto &gps = dal.gps();
 
-#ifdef INCLUDE_AMH_GPSYAW_CHANGES
+#if defined(INCLUDE_AMH_GPSYAW_CHANGES) && !APM_BUILD_TYPE(APM_BUILD_AP_DAL_Standalone)
+// This ifdef special handling of build type was only required when building the
+// AP_DAL_Standalone tool... which isn't even something I care about but I wanted it fixed so
+// github build "actions" could be happy again.
+//
+// These changes use AP::gps() in the EKF3 code but that is apparently compiled/link in time or
+// place in which it apparently isn't accessible to the linker. Much of the code in
+// AP_NavEKF3_Measurements.cpp could have been changed to use the AP_DAL_GPS versions instead
+// of the AP_GPS versions but `get_type(instance)` is not part of the DAL. I tried adding a
+// get_type to AP_DAL_GPS.cpp but that still required AP::gps() and we were back where we
+// started. Although that was particularly strange since the start_frame() function about 14
+// lines away is using AP::gps()!! That's why I same linker problem was in a time/place rather
+// than just a place.
+
     if (default_yaw_gps < 0) {
        for (unsigned i=0; i < AP::gps().num_sensors(); ++i) {
             if (AP::gps().get_type(i) == AP_GPS::GPS_TYPE_UBLOX_RTK_ROVER) {
@@ -1165,7 +1178,7 @@ void NavEKF3_core::update_gps_selection(void)
         }
     }
 
-#ifdef INCLUDE_AMH_GPSYAW_CHANGES
+#if defined(INCLUDE_AMH_GPSYAW_CHANGES) && !APM_BUILD_TYPE(APM_BUILD_AP_DAL_Standalone)
     const uint8_t prev_yaw_gps = selected_yaw_gps;
     if (AP::gps().get_type(selected_gps) == AP_GPS::GPS_TYPE_UBLOX_RTK_ROVER) {
         selected_yaw_gps = selected_gps;
