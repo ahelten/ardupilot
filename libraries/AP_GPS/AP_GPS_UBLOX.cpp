@@ -2004,5 +2004,18 @@ bool AP_GPS_UBLOX::is_healthy(void) const
 // return true if GPS is capable of F9 config
 bool AP_GPS_UBLOX::supports_F9_config(void) const
 {
+#if GPS_MOVING_BASELINE
+    if (_hardware_generation == UBLOX_F9 && _hardware_generation != UBLOX_UNKNOWN_HARDWARE_GENERATION) {
+        return true;
+    }
+    else if ((role == AP_GPS::GPS_ROLE_MB_BASE) || (role == AP_GPS::GPS_ROLE_MB_ROVER)) {
+        // For some reason, the Moving-Base (LITE board) is not responding to VER requests so
+        // this is a workaround and better than hard-coding to 'return true'
+        return true;
+    }
+
+    return false;
+#else
     return _hardware_generation == UBLOX_F9 && _hardware_generation != UBLOX_UNKNOWN_HARDWARE_GENERATION;
+#endif
 }
