@@ -722,6 +722,14 @@ void NavEKF3_core::readGpsYawData()
         // accuracy. Set to min of 5 degrees here to prevent
         // the user constantly receiving warnings about high
         // normalised yaw innovations
+
+        // @amh: The real accuracy of GPS yaw devices is much smaller than 5.0 degrees. I've
+        // mentioned to a couple ArduPilot devs about this exceptionally large mininum yaw
+        // accuracy but never got a response. I've also tried setting this to something more
+        // realistic, like 0.9 but that causes EKF3 to sporadically become unhealthy (though
+        // that test was with a slighlty older dev version of 4.1 so maybe should test it
+        // again).
+        //
         const ftype min_yaw_accuracy_deg = 5.0f; //0.9f;
         yaw_accuracy_deg = MAX(yaw_accuracy_deg, min_yaw_accuracy_deg);
         writeEulerYawAngle(radians(yaw_deg), radians(yaw_accuracy_deg), yaw_time_ms, 2);

@@ -311,7 +311,16 @@ bool AP_GPS_Backend::calculate_moving_base_yaw(const float reported_heading_deg,
     Vector3f offset;
     switch (MovingBase::Type(gps.mb_params[state.instance].type.get())) {
         case MovingBase::Type::RelativeToAlternateInstance:
-            offset = gps._antenna_offset[state.instance^1].get() - gps._antenna_offset[state.instance].get();
+            if (get_type() == AP_GPS::GPS_TYPE_SBF) {
+                // "Main" antenna (instance 0) is *always* the Moving Baseline - Base (at least
+                // in the Mosaic-H device). Might need to make this smarter or add something to
+                // the params to more accurately detect how we calculate this offset (which is
+                // really the antenna separation in a moving baseline arrangement).
+                offset = gps._antenna_offset[0].get() - gps._antenna_offset[1].get();
+            }
+            else {
+                offset = gps._antenna_offset[state.instance^1].get() - gps._antenna_offset[state.instance].get();
+            }
             selectedOffset = true;
             break;
         case MovingBase::Type::RelativeToCustomBase:

@@ -45,6 +45,9 @@ public:
 
     static void set_terrain(AP_Terrain* terrain) { _terrain = terrain; }
 
+    // Update location from radian lat/lng (including support for lat_hp/lng_hp)
+    void update_from_radians(double lat, double lng);
+
     // set altitude
     void set_alt_cm(int32_t alt_cm, AltFrame frame);
 
@@ -151,6 +154,8 @@ public:
 
 private:
     static AP_Terrain *_terrain;
+
+    void set_highprecision(int64_t hplat_1e9_degs, int64_t hplng_1e9_degs);
 
     // scaling factor from 1e-7 degrees to meters at equator
     // == 1.0e-7 * DEG_TO_RAD * RADIUS_OF_EARTH

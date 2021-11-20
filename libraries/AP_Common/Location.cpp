@@ -6,6 +6,11 @@
 
 #include <AP_AHRS/AP_AHRS.h>
 #include <AP_Terrain/AP_Terrain.h>
+#include <stdio.h>
+
+static const int64_t DEGS_90e9 = 90e9;
+static const int64_t DEGS_180e9 = 180e9;
+static const int64_t DEGS_360e9 = 360e9;
 
 AP_Terrain *Location::_terrain = nullptr;
 
@@ -84,6 +89,15 @@ Location::Location(const Vector3d &ekf_offset_neu, AltFrame frame)
 
         offset(ekf_offset_neu.x * 0.01, ekf_offset_neu.y * 0.01);
     }
+}
+
+void Location::update_from_radians(double lat_rad, double lng_rad)
+{
+    // We use '* 1e9' because we want "high-precision" lat/lng when it's available
+    int64_t hplat = lat_rad * RAD_TO_DEG_DOUBLE * 1e9;
+    int64_t hplng = lng_rad * RAD_TO_DEG_DOUBLE * 1e9;
+
+    set_highprecision(hplat, hplng);
 }
 
 void Location::set_alt_cm(int32_t alt_cm, AltFrame frame)
@@ -281,6 +295,7 @@ ftype Location::get_distance(const struct Location &loc2) const
 Vector2f Location::get_distance_NE(const Location &loc2) const
 {
 #ifdef INCLUDE_HIGH_PRECISION_GPS
+    /// @todo Update this to use integer math!!!!!!
     const double loc1_lat_hp = (double)lat + (lat_hp / 100.0);
     const double loc1_lng_hp = (double)lng + (lng_hp / 100.0);
     const double loc2_lat_hp = (double)loc2.lat + (loc2.lat_hp / 100.0);
@@ -334,6 +349,7 @@ Vector3d Location::get_distance_NED_double(const Location &loc2) const
 Vector2d Location::get_distance_NE_double(const Location &loc2) const
 {
 #ifdef INCLUDE_HIGH_PRECISION_GPS
+    /// @todo Update this to use integer math!!!!!!
     const double loc1_lat_hp = (double)lat + (lat_hp / 100.0);
     const double loc1_lng_hp = (double)lng + (lng_hp / 100.0);
     const double loc2_lat_hp = (double)loc2.lat + (loc2.lat_hp / 100.0);
@@ -361,6 +377,7 @@ Vector2d Location::get_distance_NE_double(const Location &loc2) const
 Vector2F Location::get_distance_NE_ftype(const Location &loc2) const
 {
 #ifdef INCLUDE_HIGH_PRECISION_GPS
+    /// @todo Update this to use integer math!!!!!!
     const double loc1_lat_hp = (double)lat + (double)(lat_hp / 100.0);
     const double loc1_lng_hp = (double)lng + (double)(lng_hp / 100.0);
     const double loc2_lat_hp = (double)loc2.lat + (double)(loc2.lat_hp / 100.0);
@@ -401,45 +418,15 @@ void Location::offset_latlng(int32_t &lat, int32_t &lng, ftype ofs_north, ftype 
 void Location::offset(ftype ofs_north, ftype ofs_east)
 {
 #ifdef INCLUDE_HIGH_PRECISION_GPS
-    double dlat = ofs_north * LOCATION_SCALING_FACTOR_INV;
-    double dlng = (ofs_east * LOCATION_SCALING_FACTOR_INV) / longitude_scale(lat+dlat/2);
-    double hplat = (double)lat + (lat_hp / 100.0);
-    double hplng = (double)lng + (lng_hp / 100.0);
+    const double dlat = ofs_north * LOCATION_SCALING_FACTOR_INV;
+    const double dlng = (ofs_east * LOCATION_SCALING_FACTOR_INV) / longitude_scale(lat+dlat/2);
+    int64_t hplat = ((int64_t)lat * 100) + lat_hp;
+    int64_t hplng = ((int64_t)lng * 100) + lng_hp;
 
-    hplat += dlat;
-    hplng += dlng;
-    if (hplat > 90e7) {
-        hplat -= 90e7;
-    }
-    else if (hplat < -90e7) {
-        hplat += 90e7;
-    }
-    if (hplng > 180e7) {
-        hplng -= 360e7;
-    }
-    else if (hplng < -180e7) {
-        hplng += 360e7;
-    }
+    hplat += lround(dlat * 100);
+    hplng += lround(dlng * 100);
 
-# if !defined(ALLOW_DOUBLE_MATH_FUNCTIONS)
-    if (hplat < 0.0) {
-        lat = (int32_t)(hplat - 0.5);
-    } else {
-        lat = (int32_t)(hplat + 0.5);
-    }
-    if (hplng < 0.0) {
-        lng = (int32_t)(hplng - 0.5);
-    } else {
-        lng = (int32_t)(hplng + 0.5);
-    }
-# else
-    lat = (int32_t)round(hplat);
-    lng = (int32_t)round(hplng);
-# endif
-
-    lat_hp = (int8_t)((hplat - lat) * 100.0);
-    lng_hp = (int8_t)((hplng - lng) * 100.0);
-
+    set_highprecision(hplat, hplng);
 #else
     offset_latlng(lat, lng, ofs_north, ofs_east);
 #endif
@@ -538,7 +525,9 @@ int32_t Location::get_bearing_to(const struct Location &loc2) const
 bool Location::same_latlon_as(const Location &loc2) const
 {
 #ifdef INCLUDE_HIGH_PRECISION_GPS
-    return (lat == loc2.lat) && (lng == loc2.lng) && (lat_hp == loc2.lat_hp) & (lng_hp == loc2.lng_hp);
+    // Add some wiggle room for the high-precision component
+    return    (lat == loc2.lat) && (lng == loc2.lng)
+           && (abs(lat_hp - loc2.lat_hp) < 5) && (abs(lng_hp - loc2.lng_hp) < 5);
 #else
     return (lat == loc2.lat) && (lng == loc2.lng);
 #endif
@@ -631,3 +620,39 @@ void Location::linearly_interpolate_alt(const Location &point1, const Location &
     // new target's distance along the original track and then linear interpolate between the original origin and destination altitudes
     set_alt_cm(point1.alt + (point2.alt - point1.alt) * constrain_float(line_path_proportion(point1, point2), 0.0f, 1.0f), point2.get_alt_frame());
 }
+
+// Set high precision lat/lng using "floating point 1e9 degrees". For example, 123.123456789
+// degrees would be represented as 123123456789 where the last two digits are the "high
+// precision" part.
+void Location::set_highprecision(int64_t hplat_1e9_degs, int64_t hplng_1e9_degs)
+{
+    if (hplat_1e9_degs > DEGS_90e9) {
+        hplat_1e9_degs -= DEGS_180e9;
+    }
+    else if (hplat_1e9_degs < -DEGS_90e9) {
+        hplat_1e9_degs += DEGS_180e9;
+    }
+    if (hplng_1e9_degs > DEGS_180e9) {
+        hplng_1e9_degs -= DEGS_360e9;
+    }
+    else if (hplng_1e9_degs < -DEGS_180e9) {
+        hplng_1e9_degs += DEGS_360e9;
+    }
+
+    // I think we only want the integer math on this since double-precision math was "failing"
+    // on pixhawk (it was rounding by quite a bit).
+    if (hplat_1e9_degs < 0) {
+        lat = (int32_t)((hplat_1e9_degs - 50) / 100);
+    } else {
+        lat = (int32_t)((hplat_1e9_degs + 50) / 100);
+    }
+    if (hplng_1e9_degs < 0) {
+        lng = (int32_t)((hplng_1e9_degs - 50) / 100);
+    } else {
+        lng = (int32_t)((hplng_1e9_degs + 50) / 100);
+    }
+
+    lat_hp = (int8_t)(hplat_1e9_degs - ((int64_t)lat * 100));
+    lng_hp = (int8_t)(hplng_1e9_degs - ((int64_t)lng * 100));
+}
+

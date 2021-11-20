@@ -436,7 +436,7 @@ TEST(Location, LocOffsetDouble)
                Vector2d{4682795.4576701336, 5953662.7673837934},
                Vector2d{4682797.1904749088, 5953664.1586009059},
                // Was: Vector2d{1.7365739867091179,1.2050807},
-               Vector2d{1.7327892,1.2138149},
+               Vector2d{1.7329005,1.2139255},
     };
 
     for (auto &test : tests) {
@@ -599,9 +599,9 @@ TEST(Location, Tests)
     const Location test_location4{test_vecto, Location::AltFrame::ABOVE_ORIGIN};
     // Was:  EXPECT_EQ(-35362580, test_location4.lat);
     EXPECT_EQ(-35362579, test_location4.lat);
-    EXPECT_EQ((int)33, (int)test_location4.lat_hp);
+    EXPECT_EQ((int)32, (int)test_location4.lat_hp);
     EXPECT_EQ(149165445, test_location4.lng);
-    EXPECT_EQ((int)0, (int)test_location4.lng_hp);
+    EXPECT_EQ((int)2, (int)test_location4.lng_hp);
     EXPECT_EQ(10, test_location4.alt);
     EXPECT_EQ(0, test_location4.relative_alt);
     EXPECT_EQ(0, test_location4.terrain_alt);
@@ -688,6 +688,32 @@ TEST(Location, DistanceHpposllh)
     EXPECT_FLOAT_EQ(0.00096991588, test_home.get_distance(test_home2));
     EXPECT_FLOAT_EQ(0, test_home.get_distance(test_home));
 }
+
+TEST(Location, update_from_radians)
+{
+    Location loc1;
+    EXPECT_FLOAT_EQ(0, loc1.lat);
+    EXPECT_FLOAT_EQ(0, loc1.lng);
+    EXPECT_FLOAT_EQ(0, loc1.lat_hp);
+    EXPECT_FLOAT_EQ(0, loc1.lng_hp);
+    // Update to lat=89.123456789 and lng=179.987654321
+    loc1.update_from_radians(1.5554977617269432412198320575579, 3.1413771808428489174348743263423);
+    EXPECT_EQ(891234568, loc1.lat); // it is *not* 891234567 because it was properly rounded!
+    EXPECT_EQ(1799876543, loc1.lng);
+    EXPECT_EQ(-11, loc1.lat_hp); // it is *not* 89 because it must account for the rounded 'lat'
+    EXPECT_EQ(21, loc1.lng_hp);
+
+    // Update to lat=99.987654321 and lng=189.123456789
+    loc1.update_from_radians(1.7451137792473852558959217115514, 3.3008270137212728181435228260465);
+    EXPECT_EQ(-800123457, loc1.lat);
+    EXPECT_EQ(-1708765432, loc1.lng);
+    EXPECT_EQ(21, loc1.lat_hp);
+    EXPECT_EQ(-11, loc1.lng_hp);
+
+    // 37.618986611, -97.754114555
+    //const Location loc2{376189866, -977541145, 11, 55, 0, Location::AltFrame::ABSOLUTE};
+}
+
 #endif
 
 TEST(Location, Sanitize)
@@ -731,14 +757,14 @@ TEST(Location, OffsetError)
 {
     // test at 10km from origin
     const ftype ofs_ne = 10e3 / sqrtf(2.0);
-    for (float lat = -80; lat <= 80; lat += 10.0) {
+    for (ftype lat = -80; lat <= 80; lat += 10.0) {
         Location origin{int32_t(lat*1e7), 0, 0, Location::AltFrame::ABOVE_HOME};
         Location loc = origin;
         loc.offset(ofs_ne, ofs_ne);
         Location loc2 = loc;
         loc2.offset(-ofs_ne, -ofs_ne);
         ftype dist = origin.get_distance(loc2);
-        EXPECT_FLOAT_EQ(dist, 0);
+        EXPECT_NEAR(dist, 0, 0.0001);
     }
 }
 
