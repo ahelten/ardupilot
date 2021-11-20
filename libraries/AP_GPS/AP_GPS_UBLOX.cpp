@@ -48,13 +48,13 @@
 extern const AP_HAL::HAL& hal;
 
 #if UBLOX_DEBUGGING
- # define Debug(fmt, args ...)  do {hal.console->printf("%s:%d: " fmt "\n", __FUNCTION__, __LINE__, ## args); hal.scheduler->delay(1); } while(0)
+ # define Debug(fmt, args ...)  do {printf("%s:%d: " fmt "\n", __FUNCTION__, __LINE__, ## args); hal.scheduler->delay(1); } while(0)
 #else
  # define Debug(fmt, args ...)
 #endif
 
 #if UBLOX_MB_DEBUGGING
- # define MB_Debug(fmt, args ...)  do {hal.console->printf("%s:%d: " fmt "\n", __FUNCTION__, __LINE__, ## args); hal.scheduler->delay(1); } while(0)
+ # define MB_Debug(fmt, args ...)  do {printf("%s:%d: " fmt "\n", __FUNCTION__, __LINE__, ## args); hal.scheduler->delay(1); } while(0)
 #else
  # define MB_Debug(fmt, args ...)
 #endif
@@ -622,7 +622,7 @@ AP_GPS_UBLOX::read(void)
                 break;
             }
             _step = 0;
-            Debug("reset %u", __LINE__);
+            Debug("reset %u [%u]", __LINE__, state.instance+1);
             FALLTHROUGH;
         case 0:
             if(PREAMBLE1 == data)
@@ -1266,7 +1266,7 @@ AP_GPS_UBLOX::_parse_gps(void)
 #endif
         break;
     case MSG_HPPOSLLH:
-        Debug("MSG_HPPOSLLH next_fix=%u", next_fix);
+        Debug("MSG_HPPOSLLH next_fix=%u [%u]", next_fix, state.instance+1);
         haveHpposMsg = true;
         _check_new_itow(_buffer.posllh.itow);
         _last_pos_time        = _buffer.hpposllh.itow;
@@ -1290,9 +1290,9 @@ AP_GPS_UBLOX::_parse_gps(void)
 #endif
         break;
     case MSG_STATUS:
-        Debug("MSG_STATUS fix_status=%u fix_type=%u",
+        Debug("MSG_STATUS fix_status=%u fix_type=%u [%u]",
               _buffer.status.fix_status,
-              _buffer.status.fix_type);
+              _buffer.status.fix_type, state.instance+1);
         _check_new_itow(_buffer.status.itow);
         if (havePvtMsg) {
             _unconfigured_messages |= CONFIG_RATE_STATUS;
@@ -1392,7 +1392,8 @@ AP_GPS_UBLOX::_parse_gps(void)
             _check_new_itow(_buffer.relposned.iTOW);
             if (_buffer.relposned.iTOW != _last_relposned_itow+200) {
                 // useful for looking at packet loss on links
-                MB_Debug("RELPOSNED ITOW %u %u\n", unsigned(_buffer.relposned.iTOW), unsigned(_last_relposned_itow));
+                MB_Debug("RELPOSNED ITOW %u %u [%u]", unsigned(_buffer.relposned.iTOW),
+                         unsigned(_last_relposned_itow), state.instance+1);
             }
             _last_relposned_itow = _buffer.relposned.iTOW;
 
@@ -1422,7 +1423,7 @@ AP_GPS_UBLOX::_parse_gps(void)
 #endif // GPS_MOVING_BASELINE
 
     case MSG_PVT:
-        Debug("MSG_PVT");
+        Debug("MSG_PVT [%u]", state.instance+1);
 
         havePvtMsg = true;
         // position
