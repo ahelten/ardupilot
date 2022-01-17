@@ -607,7 +607,7 @@ AP_GPS_SBF::process_message(void)
             // discarded by NavEKF3_core::readGpsYawData() anyway. And the real accuracy of GPS
             // yaw is much smaller than 5.0 degrees (for more ranting, see my comment in
             // NavEKF3_core::readGpsYawData()).
-            state.gps_yaw_accuracy = 0.9;
+            state.gps_yaw_accuracy = 1.0;
             state.have_gps_yaw_accuracy = true;
             state.rtk_baseline_y_mm = auxAntPosition.DeltaEast * 1e3;
             state.rtk_baseline_x_mm = auxAntPosition.DeltaNorth * 1e3;
