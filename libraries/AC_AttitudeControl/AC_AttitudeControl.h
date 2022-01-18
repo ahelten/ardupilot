@@ -39,6 +39,8 @@
 #define AC_ATTITUDE_CONTROL_MIN_DEFAULT                 0.1f    // minimum throttle mix default
 #define AC_ATTITUDE_CONTROL_MAN_DEFAULT                 0.1f    // manual throttle mix default
 #define AC_ATTITUDE_CONTROL_MAX_DEFAULT                 0.5f    // maximum throttle mix default
+#define AC_ATTITUDE_CONTROL_MIN_LIMIT                   0.5f    // min throttle mix upper limit
+#define AC_ATTITUDE_CONTROL_MAN_LIMIT                   4.0f    // man throttle mix upper limit
 #define AC_ATTITUDE_CONTROL_MAX                         5.0f    // maximum throttle mix default
 
 #define AC_ATTITUDE_CONTROL_THR_MIX_DEFAULT             0.5f  // ratio controlling the max throttle output during competing requests of low throttle from the pilot (or autopilot) and higher throttle for attitude control.  Higher favours Attitude over pilot input
@@ -106,11 +108,14 @@ public:
     void save_accel_yaw_max(float accel_yaw_max) { _accel_yaw_max.set_and_save(accel_yaw_max); }
 
     // get the roll angular velocity limit in radians/s
-    float get_ang_vel_roll_max_rads() const { return _ang_vel_roll_max; }
+    float get_ang_vel_roll_max_rads() const { return radians(_ang_vel_roll_max); }
 
     // get the pitch angular velocity limit in radians/s
-    float get_ang_vel_pitch_max_rads() const { return _ang_vel_pitch_max; }
+    float get_ang_vel_pitch_max_rads() const { return radians(_ang_vel_pitch_max); }
 
+    // get the yaw angular velocity limit in radians/s
+    float get_ang_vel_yaw_max_rads() const { return radians(_ang_vel_yaw_max); }
+    
     // get the yaw slew limit
     float get_slew_yaw_cds() const { return _slew_yaw; }
 
