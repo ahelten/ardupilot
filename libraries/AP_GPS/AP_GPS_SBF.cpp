@@ -599,6 +599,7 @@ AP_GPS_SBF::process_message(void)
     }
     case EndOfAtt:
     {
+        state.have_gps_yaw_accuracy = true;
         if (auxAntPositionValid && attEulerValid)
         {
             gnssYawAvailable = true;
@@ -622,6 +623,7 @@ AP_GPS_SBF::process_message(void)
         } else {
             gnssYawAvailable = false;
             state.have_gps_yaw = false;
+            state.gps_yaw_accuracy = 999.99999;
         }
         break;
     }

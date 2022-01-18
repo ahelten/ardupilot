@@ -1197,6 +1197,10 @@ void AP_GPS::send_mavlink_gps_raw(mavlink_channel_t chan)
     float hacc = 0.0f;
     float vacc = 0.0f;
     float sacc = 0.0f;
+    float hdg_acc = 0.0f;
+    float yaw_deg = 0.0f;
+    uint32_t time_ms = 0;
+    gps_yaw_deg(yaw_deg, hdg_acc, time_ms);
     horizontal_accuracy(0, hacc);
     vertical_accuracy(0, vacc);
     speed_accuracy(0, sacc);
@@ -1216,7 +1220,7 @@ void AP_GPS::send_mavlink_gps_raw(mavlink_channel_t chan)
         hacc * 1000,          // one-sigma standard deviation in mm
         vacc * 1000,          // one-sigma standard deviation in mm
         sacc * 1000,          // one-sigma standard deviation in mm/s
-        0,                    // TODO one-sigma heading accuracy standard deviation
+        hdg_acc * 1e5,        // TODO one-sigma heading accuracy standard deviation
         gps_yaw_cdeg(0));
 }
 
@@ -1232,6 +1236,10 @@ void AP_GPS::send_mavlink_gps2_raw(mavlink_channel_t chan)
     float hacc = 0.0f;
     float vacc = 0.0f;
     float sacc = 0.0f;
+    float hdg_acc = 0.0f;
+    float yaw_deg = 0.0f;
+    uint32_t time_ms = 0;
+    gps_yaw_deg(1, yaw_deg, hdg_acc, time_ms);
     horizontal_accuracy(1, hacc);
     vertical_accuracy(1, vacc);
     speed_accuracy(1, sacc);
@@ -1254,7 +1262,7 @@ void AP_GPS::send_mavlink_gps2_raw(mavlink_channel_t chan)
         hacc * 1000,          // one-sigma standard deviation in mm
         vacc * 1000,          // one-sigma standard deviation in mm
         sacc * 1000,          // one-sigma standard deviation in mm/s
-        0);                    // TODO one-sigma heading accuracy standard deviation
+        hdg_acc * 1e5);       // TODO one-sigma heading accuracy standard deviation
 }
 #endif // GPS_MAX_RECEIVERS
 
