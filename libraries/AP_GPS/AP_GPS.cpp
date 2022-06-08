@@ -68,7 +68,11 @@
 extern const AP_HAL::HAL &hal;
 
 // baudrates to try to detect GPSes with
+#ifdef INCLUDE_AMH_GPSYAW_CHANGES
+const uint32_t AP_GPS::_baudrates[] = {460800U, 230400U, 115200U};
+#else
 const uint32_t AP_GPS::_baudrates[] = {9600U, 115200U, 4800U, 19200U, 38400U, 57600U, 230400U, 460800U};
+#endif
 
 // initialisation blobs to send to the GPS to try to get it into the
 // right mode
@@ -1221,7 +1225,7 @@ void AP_GPS::send_mavlink_gps_raw(mavlink_channel_t chan)
         vacc * 1000,          // one-sigma standard deviation in mm
         sacc * 1000,          // one-sigma standard deviation in mm/s
         hdg_acc * 1e5,        // TODO one-sigma heading accuracy standard deviation
-        gps_yaw_cdeg(0));
+        static_cast<uint16_t>(yaw_deg * 100));
 }
 
 #if GPS_MAX_RECEIVERS > 1
@@ -2043,11 +2047,15 @@ void AP_GPS::Write_GPS(uint8_t i)
 bool AP_GPS::gps_yaw_deg(uint8_t instance, float &yaw_deg, float &accuracy_deg, uint32_t &time_ms) const
 {
 #if GPS_MAX_RECEIVERS > 1
-    if (instance < GPS_MAX_RECEIVERS &&
-        _type[instance] == GPS_TYPE_UBLOX_RTK_BASE &&
-        _type[instance^1] == GPS_TYPE_UBLOX_RTK_ROVER) {
-        // return the yaw from the rover
-        instance ^= 1;
+    if (instance < GPS_MAX_RECEIVERS) {
+       if (_type[instance] == GPS_TYPE_UBLOX_RTK_BASE &&
+           _type[instance^1] == GPS_TYPE_UBLOX_RTK_ROVER) {
+           // return the yaw from the rover
+           instance ^= 1;
+       }
+       else if (_type[instance] == GPS_TYPE_SBF) {
+           instance = 0;
+       }
     }
 #endif
     if (!have_gps_yaw(instance)) {
