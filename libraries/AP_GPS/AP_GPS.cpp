@@ -69,7 +69,7 @@ extern const AP_HAL::HAL &hal;
 
 // baudrates to try to detect GPSes with
 #ifdef INCLUDE_AMH_GPSYAW_CHANGES
-const uint32_t AP_GPS::_baudrates[] = {460800U, 230400U, 115200U};
+const uint32_t AP_GPS::_baudrates[] = {115200U, 460800U, 230400U};
 #else
 const uint32_t AP_GPS::_baudrates[] = {9600U, 115200U, 4800U, 19200U, 38400U, 57600U, 230400U, 460800U};
 #endif
