@@ -35,6 +35,15 @@ ln -s .vim/.screenrc ~/.screenrc
 echo '. ~pi/.vim/bashrc_extras' >> ~/.bashrc
 ```
 
+Building ArduRover for Navio2 on Linux
+====
+
+
+```
+./waf configure --board navio2
+./war rover
+```
+
 
 Running ArduRover on Linux
 ====
