@@ -221,6 +221,9 @@ const AP_Param::GroupInfo SIM::var_info3[] = {
     // @Path: ./SIM_FETtecOneWireESC.cpp
     AP_SUBGROUPINFO(fetteconewireesc_sim, "FTOWESC_", 30, SIM, FETtecOneWireESC),
 
+    // @Path: ./SIM_FETtecOneWireESC.cpp
+    AP_SUBGROUPINFO(fetteconewireesc_sim, "FTOWESC_", 30, SITL, FETtecOneWireESC),
+
     // @Path: ./SIM_RichenPower.cpp
     AP_SUBGROUPINFO(richenpower_sim, "RICH_", 31, SIM, RichenPower),
 

@@ -358,8 +358,8 @@ void Aircraft::fill_fdm(struct sitl_fdm &fdm)
         fdm.home = home;
     }
     fdm.is_lock_step_scheduled = lock_step_scheduled;
-    fdm.latitude  = location.lat * 1.0e-7;
-    fdm.longitude = location.lng * 1.0e-7;
+    fdm.latitude  = (location.lat * 1.0e-7) + (location.lat_hp * 1.0e-9);
+    fdm.longitude = (location.lng * 1.0e-7) + (location.lng_hp * 1.0e-9);
     fdm.altitude  = location.alt * 1.0e-2;
     fdm.heading   = degrees(atan2f(velocity_ef.y, velocity_ef.x));
     fdm.speedN    = velocity_ef.x;
@@ -757,8 +757,8 @@ void Aircraft::update_dynamics(const Vector3f &rot_accel)
 void Aircraft::update_wind(const struct sitl_input &input)
 {
     // wind vector in earth frame
-    wind_ef = Vector3f(cosf(radians(input.wind.direction))*cosf(radians(input.wind.dir_z)), 
-                       sinf(radians(input.wind.direction))*cosf(radians(input.wind.dir_z)), 
+    wind_ef = Vector3f(cosf(radians(input.wind.direction))*cosf(radians(input.wind.dir_z)),
+                       sinf(radians(input.wind.direction))*cosf(radians(input.wind.dir_z)),
                        sinf(radians(input.wind.dir_z))) * input.wind.speed;
 
     wind_ef.z += get_local_updraft(position + home.get_distance_NED_double(origin));

@@ -103,6 +103,7 @@ public:
         SBF_UseBaseForYaw = (1U << 1U),
         UBX_Use115200     = (1U << 2U),
         UAVCAN_MBUseDedicatedBus  = (1 << 3U),
+        UBX_DisableRtcm3  = (1U << 8U), // Disable processing/forwarding of RTCM3 messages
     };
 
 protected:
