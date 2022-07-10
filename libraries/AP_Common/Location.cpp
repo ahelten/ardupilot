@@ -668,3 +668,13 @@ void Location::set_highprecision(int64_t hplat_1e9_degs, int64_t hplng_1e9_degs)
     lng_hp = (int8_t)(hplng_1e9_degs - ((int64_t)lng * 100));
 }
 
+double Location::get_lat_hp() const
+{
+    return ((double)lat / 1e7) + ((double)lat_hp / 1e9);
+}
+
+double Location::get_lon_hp() const
+{
+    return ((double)lng / 1e7) + ((double)lng_hp / 1e9);
+}
+

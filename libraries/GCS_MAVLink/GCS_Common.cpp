@@ -859,6 +859,7 @@ ap_message GCS_MAVLINK::mavlink_id_to_ap_message_id(const uint32_t mavlink_id) c
         { MAVLINK_MSG_ID_GPS_RTK,               MSG_GPS_RTK},
         { MAVLINK_MSG_ID_GPS2_RAW,              MSG_GPS2_RAW},
         { MAVLINK_MSG_ID_GPS2_RTK,              MSG_GPS2_RTK},
+        { MAVLINK_MSG_ID_HPPOSLLH_GPS_RAW_INT,  MSG_HPPOSLLH_GPS_RAW},
         { MAVLINK_MSG_ID_SYSTEM_TIME,           MSG_SYSTEM_TIME},
         { MAVLINK_MSG_ID_RC_CHANNELS_SCALED,    MSG_SERVO_OUT},
         { MAVLINK_MSG_ID_PARAM_VALUE,           MSG_NEXT_PARAM},
@@ -5251,6 +5252,10 @@ bool GCS_MAVLINK::try_send_message(const enum ap_message id)
     case MSG_GPS_RAW:
         CHECK_PAYLOAD_SIZE(GPS_RAW_INT);
         AP::gps().send_mavlink_gps_raw(chan);
+        break;
+    case MSG_HPPOSLLH_GPS_RAW:
+        CHECK_PAYLOAD_SIZE(HPPOSLLH_GPS_RAW_INT);
+        AP::gps().send_mavlink_hpposllh_gps_raw(chan);
         break;
     case MSG_GPS_RTK:
         CHECK_PAYLOAD_SIZE(GPS_RTK);

@@ -155,6 +155,11 @@ public:
     // get lon1-lon2, wrapping at -180e7 to 180e7
     static int32_t diff_longitude(int32_t lon1, int32_t lon2);
 
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+    double get_lat_hp() const;
+    double get_lon_hp() const;
+#endif
+
 private:
 
     void set_highprecision(int64_t hplat_1e9_degs, int64_t hplng_1e9_degs);

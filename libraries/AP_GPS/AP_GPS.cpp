@@ -871,6 +871,8 @@ void AP_GPS::update_instance(uint8_t instance)
             } else {
                 // free the driver before we run the next detection, so we
                 // don't end up with two allocated at any time
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "GPS %d: timeout since last msg: %lu ms",
+                              (instance + 1), (tnow - timing[instance].last_message_time_ms));
                 delete drivers[instance];
                 drivers[instance] = nullptr;
                 state[instance].status = NO_GPS;
@@ -1348,6 +1350,22 @@ void AP_GPS::send_mavlink_gps_raw(mavlink_channel_t chan)
         sacc * 1000,          // one-sigma standard deviation in mm/s
         hdg_acc * 1e5,        // TODO one-sigma heading accuracy standard deviation
         static_cast<uint16_t>(yaw_deg * 100));
+}
+
+void AP_GPS::send_mavlink_hpposllh_gps_raw(mavlink_channel_t chan)
+{
+    const Location &loc = location(0);
+    float yaw_deg = 0.0f;
+    float hdg_acc = 0.0f;
+    uint32_t time_ms = 0;
+    gps_yaw_deg(yaw_deg, hdg_acc, time_ms);
+    mavlink_msg_hpposllh_gps_raw_int_send(
+        chan,
+        last_fix_time_ms(0)*(uint64_t)1000,
+        loc.get_lat_hp(),  // in 1E9 degrees, as a double
+        loc.get_lon_hp(),  // in 1E9 degrees, as a double
+        0,                    // TODO: Elipsoid height in mm
+        yaw_deg);
 }
 
 #if GPS_MAX_RECEIVERS > 1
