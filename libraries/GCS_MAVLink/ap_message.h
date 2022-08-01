@@ -83,5 +83,6 @@ enum ap_message : uint8_t {
     MSG_UAVIONIX_ADSB_OUT_STATUS,
     MSG_ATTITUDE_TARGET,
     MSG_HPPOSLLH_GPS_RAW,
+    MSG_HPPOSLLH_LOCATION,
     MSG_LAST // MSG_LAST must be the last entry in this enum
 };

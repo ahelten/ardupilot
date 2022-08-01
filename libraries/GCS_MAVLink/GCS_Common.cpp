@@ -860,6 +860,7 @@ ap_message GCS_MAVLINK::mavlink_id_to_ap_message_id(const uint32_t mavlink_id) c
         { MAVLINK_MSG_ID_GPS2_RAW,              MSG_GPS2_RAW},
         { MAVLINK_MSG_ID_GPS2_RTK,              MSG_GPS2_RTK},
         { MAVLINK_MSG_ID_HPPOSLLH_GPS_RAW_INT,  MSG_HPPOSLLH_GPS_RAW},
+        { MAVLINK_MSG_ID_HPPOSLLH_GLOBAL_POSITION_INT, MSG_HPPOSLLH_LOCATION},
         { MAVLINK_MSG_ID_SYSTEM_TIME,           MSG_SYSTEM_TIME},
         { MAVLINK_MSG_ID_RC_CHANNELS_SCALED,    MSG_SERVO_OUT},
         { MAVLINK_MSG_ID_PARAM_VALUE,           MSG_NEXT_PARAM},
@@ -4987,6 +4988,22 @@ void GCS_MAVLINK::send_global_position_int()
         ahrs.yaw_sensor);                // compass heading in 1/100 degree
 }
 
+void GCS_MAVLINK::send_hpposllh_global_position_int()
+{
+    AP_AHRS &ahrs = AP::ahrs();
+
+    struct Location curr_loc;
+    UNUSED_RESULT(ahrs.get_location(curr_loc)); // return value ignored; we send stale data
+
+    mavlink_msg_hpposllh_global_position_int_send(
+        chan,
+        AP_HAL::millis(),
+        curr_loc.get_lat_hp(),  // in 1E9 degrees (as a double)
+        curr_loc.get_lon_hp(),  // in 1E9 degrees (as a double)
+        curr_loc.alt / 100.0f, // height, in meters (hopefully this is height above WGS-84 ellipsoid)
+        ahrs.yaw_sensor / 100.0f); // heading, in degrees
+}
+
 void GCS_MAVLINK::send_gimbal_report() const
 {
 #if HAL_MOUNT_ENABLED
@@ -5167,6 +5184,11 @@ bool GCS_MAVLINK::try_send_message(const enum ap_message id)
     case MSG_LOCATION:
         CHECK_PAYLOAD_SIZE(GLOBAL_POSITION_INT);
         send_global_position_int();
+        break;
+
+    case MSG_HPPOSLLH_LOCATION:
+        CHECK_PAYLOAD_SIZE(HPPOSLLH_GLOBAL_POSITION_INT);
+        send_hpposllh_global_position_int();
         break;
 
     case MSG_HOME:
