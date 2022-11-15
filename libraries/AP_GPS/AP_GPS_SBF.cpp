@@ -423,6 +423,8 @@ AP_GPS_SBF::process_message(void)
         if (temp.Latitude > doubleDNU) {
             state.location.update_from_radians(temp.Latitude, temp.Longitude);
             state.location.alt = (int32_t)(((float)temp.Height - temp.Undulation) * 1e2f);
+            state.have_undulation = true;
+            state.undulation = temp.Undulation;
         }
 
         if (temp.NrSV != 255) {
