@@ -1,9 +1,33 @@
+Retrieve the code:
+====
+
+    git clone --recursive git@github.com:ahelten/ardupilot.git
+    git remote add main-ardupilot https://github.com/ArduPilot/ardupilot
+    git fetch main-ardupilot
+    git submodule update --init --recursive
+
+      # Use whatever the HEAD of most recent `hpposllh_` branch:
+    git branch -av|grep hpposllh_
+      # For example:
+    git checkout hpposllh_sync_with_4.2.3-rc1
+
+      # Or checkout using the latest tag of the latest branch:
+    git tag -l | grep ahelten
+
 Build ArduPilot:
 ====
 
-    cd ~/amh_devel/ardupilot
+    cd <ardupilot>
     ./waf configure --board CubeOrange
     ./waf rover
+    ll build/CubeOrange/bin/ardurover.apj
+
+For Cube+ (not currently using this hardware version, but we do have one):
+
+    cd <ardupilot>
+    ./waf configure --board CubeOrangePlus
+    ./waf rover
+    ll build/CubeOrangePlus/bin/ardurover.apj
 
 
 Copy ArduPilot:
@@ -21,11 +45,15 @@ To PC from VM:
 Program ArduPilot:
 ====
 
-    sudo ~/Greenfield/killit
-    cd ~/amh_devel/ardupilot
+```
+sudo ~/Greenfield/killit
+cd ~/amh_devel/ardupilot
 
-    # Use correct serial device name!
-    python3 Tools/scripts/uploader.py --port /dev/ttyACM0 ../ardurover.apj
+# Use correct serial device name!
+python3 Tools/scripts/uploader.py --port /dev/ttyACM0 ../ardurover.apj
+# Or:
+python3 ./uploader.py --port $(readlink -f /dev/serial/by-id/usb-*_CubeOrange*-if00) ./ardurover.apj
+```
 
 
 Setup Pi for ArduPilot ser2net:
