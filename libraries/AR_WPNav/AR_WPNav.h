@@ -67,6 +67,8 @@ public:
     // get current destination. Note: this is not guaranteed to be valid (i.e. _orig_and_dest_valid is not checked)
     const Location &get_destination() const { return _destination; }
 
+    const Location &get_origin() { return _origin; }
+
     // return heading (in centi-degrees) and cross track error (in meters) for reporting to ground station (NAV_CONTROLLER_OUTPUT message)
     float wp_bearing_cd() const { return _wp_bearing_cd; }
     float nav_bearing_cd() const { return _desired_heading_cd; }
@@ -147,6 +149,7 @@ protected:
     AR_PivotTurn _pivot;            // pivot turn controller
     AP_Float _accel_max;            // max acceleration.  If zero then attitude controller's specified max accel is used
     AP_Float _jerk_max;             // max jerk (change in acceleration).  If zero then value is same as accel_max
+    AP_Float _pivot_delay;          // waiting time after pivot turn
 
     // references
     AR_AttitudeControl& _atc;       // rover attitude control library

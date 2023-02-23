@@ -1566,6 +1566,10 @@ AP_InertialSensor::_init_gyro()
                                 (unsigned)k,
                                 (double)ToDeg(best_diff[k]),
                                 (double)GYRO_INIT_MAX_DIFF_DPS);
+            gcs().send_text(MAV_SEVERITY_ERROR,
+                            "gyro[%u] calibration did not converge: diff=%f dps (expected < %f)",
+                            (unsigned)k, (double)ToDeg(best_diff[k]),
+                            (double)GYRO_INIT_MAX_DIFF_DPS);
             _gyro_offset[k].set(best_avg[k]);
             // flag calibration as failed for this gyro
             _gyro_cal_ok[k] = false;
@@ -1586,6 +1590,8 @@ AP_InertialSensor::_init_gyro()
 
     // stop flashing leds
     AP_Notify::flags.initialising = false;
+
+    gcs().send_text(MAV_SEVERITY_INFO, "Gyro calibration complete");
 }
 
 // save parameters to eeprom
