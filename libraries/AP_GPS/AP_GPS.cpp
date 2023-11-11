@@ -872,7 +872,8 @@ void AP_GPS::update_instance(uint8_t instance)
                 // free the driver before we run the next detection, so we
                 // don't end up with two allocated at any time
                 GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "GPS %d: timeout since last msg: %lu ms",
-                              (instance + 1), (tnow - timing[instance].last_message_time_ms));
+                              (instance + 1),
+                              (static_cast<long unsigned>(tnow) - timing[instance].last_message_time_ms));
                 delete drivers[instance];
                 drivers[instance] = nullptr;
                 state[instance].status = NO_GPS;
