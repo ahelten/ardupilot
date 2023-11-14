@@ -564,7 +564,11 @@ private:
     };
 
     struct gps_elements : EKF_obs_element_t {
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+        Location    pos;            // latitude and longitude in 1e7 (or 1e9) degrees
+#else
         int32_t     lat, lng;       // latitude and longitude in 1e7 degrees
+#endif
         ftype       hgt;            // height of the GPS antenna in local NED earth frame (m)
         Vector3F    vel;            // velocity of the GPS antenna in local NED earth frame (m/sec)
         uint8_t     sensor_idx;     // unique integer identifying the GPS sensor
@@ -1564,6 +1568,10 @@ private:
     uint8_t preferred_gps;
     uint8_t selected_baro;
     uint8_t selected_airspeed;
+#ifdef INCLUDE_AMH_GPSYAW_CHANGES
+    uint8_t selected_yaw_gps = 0;
+    int8_t default_yaw_gps = -1;
+#endif
 
     // source reset handling
     AP_NavEKF_Source::SourceXY posxy_source_last;   // horizontal position source on previous iteration (used to detect a changes)

@@ -117,13 +117,19 @@ private:
 
     // integral feedback to correct crosstrack error. Used to ensure xtrack converges to zero.
     // For tuning purposes it's helpful to clear the integrator when it changes so a _prev is used
-    float _L1_xtrack_i = 0;
+    float _L1_xtrack_i = 0.0f;
     AP_Float _L1_xtrack_i_gain;
-    float _L1_xtrack_i_gain_prev = 0;
-    uint32_t _last_update_waypoint_us;
+    float _L1_xtrack_i_gain_prev = 0.0f;
+    uint32_t _last_update_waypoint_us = 0;
     bool _data_is_stale = true;
+#define INCLUDE_AMH_EXPERIMENTAL_L1_CHANGES
+#if defined(INCLUDE_AMH_EXPERIMENTAL_L1_CHANGES)
+    AP_Float _L1_nu2_damping;
+    float _prev_L1_nu2_damping = -1.0f;
+    float _L1_nu2_damp_countdown_s = 1.0f;
+#endif
 
-    AP_Float _loiter_bank_limit;
+#define INCLUDE_RESE    AP_Float _loiter_bank_limit;
 
     bool _reverse = false;
     float get_yaw() const;

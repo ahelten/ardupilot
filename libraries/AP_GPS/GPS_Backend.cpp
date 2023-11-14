@@ -357,7 +357,16 @@ bool AP_GPS_Backend::calculate_moving_base_yaw(AP_GPS::GPS_State &interim_state,
     Vector3f offset;
     switch (MovingBase::Type(gps.mb_params[interim_state.instance].type.get())) {
         case MovingBase::Type::RelativeToAlternateInstance:
+            if (get_type() == AP_GPS::GPS_TYPE_SBF) {
+                // "Main" antenna (instance 0) is *always* the Moving Baseline - Base (at least
+                // in the Mosaic-H device). Might need to make this smarter or add something to
+                // the params to more accurately detect how we calculate this offset (which is
+                // really the antenna separation in a moving baseline arrangement).
+                offset = gps._antenna_offset[0].get() - gps._antenna_offset[1].get();
+            }
+            else {
             offset = gps._antenna_offset[interim_state.instance^1].get() - gps._antenna_offset[interim_state.instance].get();
+            }
             selectedOffset = true;
             break;
         case MovingBase::Type::RelativeToCustomBase:
@@ -369,6 +378,8 @@ bool AP_GPS_Backend::calculate_moving_base_yaw(AP_GPS::GPS_State &interim_state,
     if (!selectedOffset) {
         // invalid type, let's throw up a flag
         INTERNAL_ERROR(AP_InternalError::error_t::flow_of_control);
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                      "Invalid MovingBase Type: %d", gps.mb_params[state.instance].type.get());
         goto bad_yaw;
     }
 
@@ -379,6 +390,9 @@ bool AP_GPS_Backend::calculate_moving_base_yaw(AP_GPS::GPS_State &interim_state,
         if (offset_dist < minimum_antenna_seperation) {
             // offsets have to be sufficently large to get a meaningful angle off of them
             Debug("Insufficent antenna offset (%f, %f, %f)", (double)offset.x, (double)offset.y, (double)offset.z);
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                          "Insufficent antenna offset (%.3f, %.3f, %.3f)", (double)offset.x,
+                          (double)offset.y, (double)offset.z);
             goto bad_yaw;
         }
 
@@ -386,6 +400,9 @@ bool AP_GPS_Backend::calculate_moving_base_yaw(AP_GPS::GPS_State &interim_state,
             // if the reported distance is less then the minimum seperation it's not sufficently robust
             Debug("Reported baseline distance (%f) was less then the minimum antenna seperation (%f)",
                   (double)reported_distance, (double)minimum_antenna_seperation);
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                          "Reported baseline distance (%f) less than min antenna seperation (%f)",
+                          (double)reported_distance, (double)minimum_antenna_seperation);
             goto bad_yaw;
         }
 
@@ -394,6 +411,10 @@ bool AP_GPS_Backend::calculate_moving_base_yaw(AP_GPS::GPS_State &interim_state,
             // the magnitude of the vector is much further then we were expecting
             Debug("Exceeded the permitted error margin %f > %f",
                   (double)(offset_dist - reported_distance), (double)(min_dist * permitted_error_length_pct));
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                          "Exceeded permitted error margin %.3f > %.3f",
+                          (double)(offset_dist - reported_distance),
+                          (double)(min_dist * permitted_error_length_pct));
             goto bad_yaw;
         }
 
@@ -422,6 +443,10 @@ bool AP_GPS_Backend::calculate_moving_base_yaw(AP_GPS::GPS_State &interim_state,
                 // the vertical component is out of range, reject it
                 Debug("bad alt_err %.1f > %.1f\n",
                       alt_error, permitted_error_length_pct * min_dist);
+                GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                              "Vertical range: %.3f > %.3f (%4.2f,%4.2f,%4.2f)",
+                              fabsf(alt_error), permitted_error_length_pct * min_dist,
+                              (double)offset.x, (double)offset.y, (double)offset.z);
                 goto bad_yaw;
             }
         }

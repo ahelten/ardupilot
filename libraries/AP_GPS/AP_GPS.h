@@ -25,6 +25,9 @@
 #include <SITL/SIM_GPS.h>
 #include <GCS_MAVLink/GCS_MAVLink.h>
 
+#define INCLUDE_AMH_GPSYAW_CHANGES
+
+
 /**
    maximum number of GPS instances available on this platform. If more
    than 1 then redundant sensors may be available
@@ -473,6 +476,7 @@ public:
     //MAVLink Status Sending
     void send_mavlink_gps_raw(mavlink_channel_t chan);
     void send_mavlink_gps2_raw(mavlink_channel_t chan);
+    void send_mavlink_hpposllh_gps_raw(mavlink_channel_t chan);
 
     void send_mavlink_gps_rtk(mavlink_channel_t chan, uint8_t inst);
 
@@ -608,6 +612,7 @@ protected:
         UBX_Use115200     = (1U << 2U),
         UAVCAN_MBUseDedicatedBus  = (1 << 3U),
         HeightEllipsoid   = (1U << 4),
+        UBX_DisableRtcm3  = (1U << 8U), // Disable processing/forwarding of RTCM3 messages in u-blox
     };
 
     // check if an option is set

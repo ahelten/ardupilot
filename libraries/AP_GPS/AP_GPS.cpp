@@ -70,7 +70,11 @@
 extern const AP_HAL::HAL &hal;
 
 // baudrates to try to detect GPSes with
+#ifdef INCLUDE_AMH_GPSYAW_CHANGES
+const uint32_t AP_GPS::_baudrates[] = {115200U, 460800U, 230400U};
+#else
 const uint32_t AP_GPS::_baudrates[] = {9600U, 115200U, 4800U, 19200U, 38400U, 57600U, 230400U, 460800U};
+#endif
 
 // initialisation blobs to send to the GPS to try to get it into the
 // right mode.
@@ -314,7 +318,7 @@ const AP_Param::GroupInfo AP_GPS::var_info[] = {
     // @Param: _DRV_OPTIONS
     // @DisplayName: driver options
     // @Description: Additional backend specific options
-    // @Bitmask: 0:Use UART2 for moving baseline on ublox,1:Use base station for GPS yaw on SBF,2:Use baudrate 115200,3:Use dedicated CAN port b/w GPSes for moving baseline,4:Use ellipsoid height instead of AMSL
+    // @Bitmask: 0:Use UART2 for moving baseline on ublox,1:Use base station for GPS yaw on SBF,2:Use baudrate 115200,3:Use dedicated CAN port b/w GPSes for moving baseline,4:Use ellipsoid height instead of AMSL,8:Disable RTCM3 forwarding to MovingBaseline-Rover
     // @User: Advanced
     AP_GROUPINFO("_DRV_OPTIONS", 22, AP_GPS, _driver_options, 0),
 
@@ -922,6 +926,9 @@ void AP_GPS::update_instance(uint8_t instance)
             } else {
                 // free the driver before we run the next detection, so we
                 // don't end up with two allocated at any time
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "GPS %d: timeout since last msg: %lu ms",
+                              (instance + 1),
+                              (static_cast<long unsigned>(tnow) - timing[instance].last_message_time_ms));
                 delete drivers[instance];
                 drivers[instance] = nullptr;
                 state[instance].status = NO_GPS;
@@ -1376,6 +1383,10 @@ void AP_GPS::send_mavlink_gps_raw(mavlink_channel_t chan)
     float hacc = 0.0f;
     float vacc = 0.0f;
     float sacc = 0.0f;
+    float hdg_acc = 0.0f;
+    float yaw_deg = 0.0f;
+    uint32_t time_ms = 0;
+    gps_yaw_deg(yaw_deg, hdg_acc, time_ms);
     float undulation = 0.0;
     int32_t height_elipsoid_mm = 0;
     if (get_undulation(0, undulation)) {
@@ -1400,8 +1411,24 @@ void AP_GPS::send_mavlink_gps_raw(mavlink_channel_t chan)
         hacc * 1000,          // one-sigma standard deviation in mm
         vacc * 1000,          // one-sigma standard deviation in mm
         sacc * 1000,          // one-sigma standard deviation in mm/s
-        0,                    // TODO one-sigma heading accuracy standard deviation
-        gps_yaw_cdeg(0));
+        hdg_acc * 1e5,        // TODO one-sigma heading accuracy standard deviation
+        static_cast<uint16_t>(yaw_deg * 100));
+}
+
+void AP_GPS::send_mavlink_hpposllh_gps_raw(mavlink_channel_t chan)
+{
+    const Location &loc = location(0);
+    float yaw_deg = 0.0f;
+    float hdg_acc = 0.0f;
+    uint32_t time_ms = 0;
+    gps_yaw_deg(yaw_deg, hdg_acc, time_ms);
+    mavlink_msg_hpposllh_gps_raw_int_send(
+        chan,
+        last_fix_time_ms(0)*(uint64_t)1000,
+        loc.get_lat_hp(),  // in 1E9 degrees, as a double
+        loc.get_lon_hp(),  // in 1E9 degrees, as a double
+        0,                    // TODO: Elipsoid height in mm
+        yaw_deg);
 }
 
 #if GPS_MAX_RECEIVERS > 1
@@ -1416,6 +1443,10 @@ void AP_GPS::send_mavlink_gps2_raw(mavlink_channel_t chan)
     float hacc = 0.0f;
     float vacc = 0.0f;
     float sacc = 0.0f;
+    float hdg_acc = 0.0f;
+    float yaw_deg = 0.0f;
+    uint32_t time_ms = 0;
+    gps_yaw_deg(1, yaw_deg, hdg_acc, time_ms);
     float undulation = 0.0;
     float height_elipsoid_mm = 0;
     if (get_undulation(1, undulation)) {
@@ -1443,7 +1474,7 @@ void AP_GPS::send_mavlink_gps2_raw(mavlink_channel_t chan)
         hacc * 1000,          // one-sigma standard deviation in mm
         vacc * 1000,          // one-sigma standard deviation in mm
         sacc * 1000,          // one-sigma standard deviation in mm/s
-        0);                    // TODO one-sigma heading accuracy standard deviation
+        hdg_acc * 1e5);       // TODO one-sigma heading accuracy standard deviation
 }
 #endif // GPS_MAX_RECEIVERS
 
@@ -2175,6 +2206,7 @@ void AP_GPS::Write_GPS(uint8_t i)
     uint32_t yaw_time_ms;
     gps_yaw_deg(i, yaw_deg, yaw_accuracy_deg, yaw_time_ms);
 
+#ifndef INCLUDE_HIGH_PRECISION_GPS__DISABLE_THIS_MACRO_FOR_NOW
     const struct log_GPS pkt {
         LOG_PACKET_HEADER_INIT(LOG_GPS_MSG),
         time_us       : time_us,
@@ -2193,6 +2225,25 @@ void AP_GPS::Write_GPS(uint8_t i)
         yaw           : yaw_deg,
         used          : (uint8_t)(AP::gps().primary_sensor() == i)
     };
+#else
+    const struct log_GPS pkt {
+        LOG_PACKET_HEADER_INIT(LOG_GPS_MSG),
+        time_us       : time_us,
+        instance      : i,
+        status        : (uint8_t)status(i),
+        gps_week_ms   : time_week_ms(i),
+        gps_week      : time_week(i),
+        latitude      : loc.lat,
+        longitude     : loc.lng,
+        lat_hp        : loc.lat_hp,
+        lng_hp        : loc.lng_hp,
+        altitude      : loc.alt,
+        ground_speed  : ground_speed(i),
+        ground_course : ground_course(i),
+        yaw           : yaw_deg,
+        used          : (uint8_t)(AP::gps().primary_sensor() == i)
+    };
+#endif
     AP::logger().WriteBlock(&pkt, sizeof(pkt));
 
     /* write auxiliary accuracy information as well */
@@ -2202,6 +2253,7 @@ void AP_GPS::Write_GPS(uint8_t i)
     vertical_accuracy(i, vacc);
     speed_accuracy(i, sacc);
     get_undulation(i, undulation);
+#ifndef INCLUDE_HIGH_PRECISION_GPS__DISABLE_THIS_MACRO_FOR_NOW
     struct log_GPA pkt2{
         LOG_PACKET_HEADER_INIT(LOG_GPA_MSG),
         time_us       : time_us,
@@ -2216,12 +2268,75 @@ void AP_GPS::Write_GPS(uint8_t i)
         delta_ms      : last_message_delta_time_ms(i),
         undulation    : undulation,
     };
+#else
+    struct log_GPA pkt2{
+        LOG_PACKET_HEADER_INIT(LOG_GPA_MSG),
+        time_us       : time_us,
+        instance      : i,
+        hdop          : get_hdop(i),
+        vdop          : get_vdop(i),
+        hacc          : (uint16_t)MIN((hacc*100), UINT16_MAX),
+        vacc          : (uint16_t)MIN((vacc*100), UINT16_MAX),
+        sacc          : (uint16_t)MIN((sacc*100), UINT16_MAX),
+        yaw_accuracy  : yaw_accuracy_deg,
+        vel_z         : velocity(i).z,
+        have_vv       : (uint8_t)have_vertical_velocity(i),
+        sample_ms     : last_message_time_ms(i),
+        delta_ms      : last_message_delta_time_ms(i),
+        num_sats      : num_sats(i)
+    };
+#endif
     AP::logger().WriteBlock(&pkt2, sizeof(pkt2));
 }
 
 /*
   get GPS based yaw
  */
+#ifdef INCLUDE_AMH_GPSYAW_CHANGES
+// @amh: The overall design here is too inconsistent to fix properly but if you happen to
+// be using Ublox (we are) then you can see that 'have_gps_yaw_accuracy' is set false when
+// the Ublox device itself determines it has no GPS yaw (even though it is configured for
+// it and is sending RELPOSNED). The original version of this function returned a
+// hard-coded accuracy of 10 degrees but otherwise considered the yaw to be "accurate" even
+// when the underlying GPS device considered it be 100% invalid. The new version of this
+// function returns false if 'have_gps_yaw_accuracy' is false instead of faking the
+// accuracy. This might not be better but it makes more sense at this moment.
+//
+bool AP_GPS::gps_yaw_deg(uint8_t instance, float &yaw_deg, float &accuracy_deg, uint32_t &time_ms) const
+{
+#if GPS_MAX_RECEIVERS > 1
+    if (instance < GPS_MAX_RECEIVERS) {
+        if (((_type[instance] == GPS_TYPE_UBLOX_RTK_BASE) || (_type[instance] == GPS_TYPE_UAVCAN_RTK_BASE)) &&
+            ((_type[instance^1] == GPS_TYPE_UBLOX_RTK_ROVER) || (_type[instance^1] == GPS_TYPE_UAVCAN_RTK_ROVER))) {
+            // return the yaw from the rover
+            instance ^= 1;
+        }
+        else if (_type[instance] == GPS_TYPE_SBF) {
+            // @amh: Makes a HUGE assumption this is a single device for Pos+Yaw (e.g. Mosaic-H)
+            instance = 0;
+        }
+    }
+#endif
+    if (!have_gps_yaw(instance)) {
+        return false;
+    }
+    else if (!state[instance].have_gps_yaw_accuracy) {
+        return false;
+    }
+    yaw_deg = state[instance].gps_yaw;
+
+    // get lagged timestamp
+    time_ms = state[instance].gps_yaw_time_ms;
+    float lag_s;
+    if (get_lag(instance, lag_s)) {
+        uint32_t lag_ms = lag_s * 1000;
+        time_ms -= lag_ms;
+    }
+
+    accuracy_deg = state[instance].gps_yaw_accuracy;
+    return true;
+}
+#else
 bool AP_GPS::gps_yaw_deg(uint8_t instance, float &yaw_deg, float &accuracy_deg, uint32_t &time_ms) const
 {
 #if GPS_MAX_RECEIVERS > 1
@@ -2253,6 +2368,7 @@ bool AP_GPS::gps_yaw_deg(uint8_t instance, float &yaw_deg, float &accuracy_deg, 
     }
     return true;
 }
+#endif
 
 namespace AP {
 

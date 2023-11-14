@@ -157,8 +157,16 @@ void GCS::update_sensor_status_flags()
     if (ahrs.initialised()) {
         control_sensors_enabled |= MAV_SYS_STATUS_AHRS;
         if (ahrs.healthy()) {
+            static bool sendMavlinkErrorMessage = true;
             if (!ahrs.have_inertial_nav() || ins.accel_calibrated_ok_all()) {
                 control_sensors_health |= MAV_SYS_STATUS_AHRS;
+                sendMavlinkErrorMessage = true;
+            }
+            else {
+                if (!ins.accel_calibrated_ok_all() && sendMavlinkErrorMessage) {
+                    GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "Accelerometers are NOT calibrated!!!");
+                    sendMavlinkErrorMessage = false;
+                }
             }
         }
     }

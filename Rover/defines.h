@@ -41,6 +41,7 @@ enum LoggingParameters {
 #define MASK_LOG_STEERING       (1<<13)
 #define MASK_LOG_RC             (1<<14)
 // #define MASK_LOG_ARM_DISARM     (1<<15)
+#define MASK_LOG_L1             (1UL<<17)
 #define MASK_LOG_IMU_RAW        (1UL<<19)
 #define MASK_LOG_VIDEO_STABILISATION (1UL<<20)
 #define MASK_LOG_OPTFLOW                (1UL<<21)

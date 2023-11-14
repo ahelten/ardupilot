@@ -664,6 +664,7 @@ protected:
     // vehicle-overridable message send function
     virtual bool try_send_message(enum ap_message id);
     virtual void send_global_position_int();
+    virtual void send_hpposllh_global_position_int();
 
     // message sending functions:
     bool try_send_mission_message(enum ap_message id);

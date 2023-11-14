@@ -17,9 +17,13 @@ AP_DAL_GPS::AP_DAL_GPS()
 const Location &AP_DAL_GPS::location(uint8_t instance) const
 {
     Location &loc = tmp_location[instance];
+
+    // For "high precision", tmp_location[] was already updated in start_frame()
+#ifndef INCLUDE_HIGH_PRECISION_GPS
     loc.lat = _RGPJ[instance].lat;
     loc.lng = _RGPJ[instance].lng;
     loc.alt = _RGPJ[instance].alt;
+#endif
     return loc;
 }
 
@@ -46,6 +50,9 @@ void AP_DAL_GPS::start_frame()
         RGPJ.last_message_time_ms = gps.last_message_time_ms(i);
         RGPJ.lat = loc.lat;
         RGPJ.lng = loc.lng;
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+        loc.get_latlng(tmp_location[i]);
+#endif
         RGPJ.alt = loc.alt;
         RGPI.have_vertical_velocity = gps.have_vertical_velocity(i);
 
@@ -53,7 +60,7 @@ void AP_DAL_GPS::start_frame()
         RGPI.vertical_accuracy_returncode = gps.vertical_accuracy(i, RGPJ.vacc);
         RGPJ.hdop = gps.get_hdop(i);
         RGPI.num_sats = gps.num_sats(i);
-        RGPI.get_lag_returncode = gps.get_lag(i, RGPI.lag_sec);
+       RGPI.get_lag_returncode = gps.get_lag(i, RGPI.lag_sec);
 
         RGPJ.velocity = gps.velocity(i);
         RGPI.speed_accuracy_returncode = gps.speed_accuracy(i, RGPJ.sacc);

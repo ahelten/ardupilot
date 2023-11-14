@@ -2,17 +2,24 @@
 
 #include <AP_Math/AP_Math.h>
 
+#define INCLUDE_HIGH_PRECISION_GPS
+
 #define LOCATION_ALT_MAX_M  83000   // maximum altitude (in meters) that can be fit into Location structure's alt field
 
 class Location
 {
 public:
 
+
     uint8_t relative_alt : 1;           // 1 if altitude is relative to home
     uint8_t loiter_ccw   : 1;           // 0 if clockwise, 1 if counter clockwise
     uint8_t terrain_alt  : 1;           // this altitude is above terrain
     uint8_t origin_alt   : 1;           // this altitude is above ekf origin
     uint8_t loiter_xtrack : 1;          // 0 to crosstrack from center of waypoint, 1 to crosstrack from tangent exit location
+
+    // INCLUDE_HIGH_PRECISION_GPS -- leave these enabled to limit changes to logging code
+    int8_t lat_hp;
+    int8_t lng_hp;
 
     // note that mission storage only stores 24 bits of altitude (~ +/- 83km)
     int32_t alt;
@@ -30,8 +37,12 @@ public:
     /// constructors
     Location();
     Location(int32_t latitude, int32_t longitude, int32_t alt_in_cm, AltFrame frame);
+    Location(int32_t latitude, int32_t longitude, int8_t latitude_hp, int8_t longitude_hp, int32_t alt_in_cm, AltFrame frame);
     Location(const Vector3f &ekf_offset_neu, AltFrame frame);
     Location(const Vector3d &ekf_offset_neu, AltFrame frame);
+
+    // Update location from radian lat/lng (including support for lat_hp/lng_hp)
+    void update_from_radians(double lat, double lng);
 
     // set altitude
     void set_alt_cm(int32_t alt_cm, AltFrame frame);
@@ -77,7 +88,9 @@ public:
     Vector2F get_distance_NE_ftype(const Location &loc2) const;
 
     // extrapolate latitude/longitude given distances (in meters) north and east
+#ifndef INCLUDE_HIGH_PRECISION_GPS
     static void offset_latlng(int32_t &lat, int32_t &lng, ftype ofs_north, ftype ofs_east);
+#endif
     void offset(ftype ofs_north, ftype ofs_east);
 
     // extrapolate latitude/longitude given bearing and distance
@@ -146,7 +159,15 @@ public:
     // get lon1-lon2, wrapping at -180e7 to 180e7
     static int32_t diff_longitude(int32_t lon1, int32_t lon2);
 
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+    double get_lat_hp() const;
+    double get_lon_hp() const;
+    void get_latlng(Location &location) const;
+#endif
+
 private:
+
+    void set_highprecision(int64_t hplat_1e9_degs, int64_t hplng_1e9_degs);
 
     // scaling factor from 1e-7 degrees to meters at equator
     // == 1.0e-7 * DEG_TO_RAD * RADIUS_OF_EARTH

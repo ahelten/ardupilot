@@ -241,8 +241,12 @@ private:
     bool _have_gps_lock;
 
     // the lat/lng where we last had GPS lock
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+    Location _last_pos;
+#else
     int32_t _last_lat;
     int32_t _last_lng;
+#endif
     uint32_t _last_pos_ms;
 
     // position offset from last GPS lock

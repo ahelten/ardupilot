@@ -314,8 +314,12 @@ bool NavEKF3_core::getLLH(Location &loc) const
             loc.set_alt_cm(origin.alt - posD*100.0, Location::AltFrame::ABSOLUTE);
             if (filterStatus.flags.horiz_pos_abs || filterStatus.flags.horiz_pos_rel) {
                 // The EKF is able to provide a position estimate
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+                EKF_origin.get_latlng(loc);
+#else
                 loc.lat = EKF_origin.lat;
                 loc.lng = EKF_origin.lng;
+#endif
                 loc.offset(outputDataNew.position.x + posOffsetNED.x,
                            outputDataNew.position.y + posOffsetNED.y);
                 return true;
@@ -325,8 +329,12 @@ bool NavEKF3_core::getLLH(Location &loc) const
                     return true;
                 } else {
                     // Return the EKF estimate but mark it as invalid
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+                    EKF_origin.get_latlng(loc);
+#else
                     loc.lat = EKF_origin.lat;
                     loc.lng = EKF_origin.lng;
+#endif
                     loc.offset(outputDataNew.position.x + posOffsetNED.x,
                                outputDataNew.position.y + posOffsetNED.y);
                     return false;
@@ -337,8 +345,12 @@ bool NavEKF3_core::getLLH(Location &loc) const
             if (getGPSLLH(loc)) {
                 return true;
             } else {
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+                EKF_origin.get_latlng(loc);
+#else
                 loc.lat = EKF_origin.lat;
                 loc.lng = EKF_origin.lng;
+#endif
                 loc.offset(lastKnownPositionNE.x + posOffsetNED.x,
                            lastKnownPositionNE.y + posOffsetNED.y);
                 loc.alt = EKF_origin.alt - lastKnownPositionD*100.0;

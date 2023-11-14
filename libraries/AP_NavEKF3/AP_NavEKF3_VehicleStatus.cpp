@@ -1,6 +1,7 @@
 #include <AP_HAL/AP_HAL.h>
 
 #include "AP_NavEKF3_core.h"
+#include <GCS_MAVLink/GCS.h>
 #include <AP_DAL/AP_DAL.h>
 
 /* Monitor GPS data to see if quality is good enough to initialise the EKF
@@ -66,6 +67,11 @@ void NavEKF3_core::calcGpsGoodToAlign(void)
 
     // Report check result as a text string and bitmask
     if (gpsDriftFail) {
+        if (!gpsCheckStatus.bad_horiz_drift) {
+            gcs().send_text(MAV_SEVERITY_CRITICAL,
+                            "Bad EKF3: GPS drift %.1fm (needs %.1f) !!", (double)gpsDriftNE,
+                            (double)(3.0f*checkScaler));
+        }
         dal.snprintf(prearm_fail_string,
                            sizeof(prearm_fail_string),
                            "GPS drift %.1fm (needs %.1f)", (double)gpsDriftNE, (double)(3.0f*checkScaler));
@@ -87,6 +93,11 @@ void NavEKF3_core::calcGpsGoodToAlign(void)
 
     // Report check result as a text string and bitmask
     if (gpsVertVelFail) {
+        if (!gpsCheckStatus.bad_vert_vel) {
+            gcs().send_text(MAV_SEVERITY_CRITICAL,
+                            "Bad EKF3: GPS vertical speed %.2fm/s (needs %.2f) !!",
+                            (double)fabsF(gpsVertVelFilt), (double)(0.3f*checkScaler));
+        }
         dal.snprintf(prearm_fail_string,
                            sizeof(prearm_fail_string),
                            "GPS vertical speed %.2fm/s (needs %.2f)", (double)fabsF(gpsVertVelFilt), (double)(0.3f*checkScaler));
@@ -108,6 +119,11 @@ void NavEKF3_core::calcGpsGoodToAlign(void)
 
     // Report check result as a text string and bitmask
     if (gpsHorizVelFail) {
+        if (!gpsCheckStatus.bad_horiz_vel) {
+            gcs().send_text(MAV_SEVERITY_CRITICAL,
+                            "Bad EKF3: GPS horizontal speed %.2fm/s (needs %.2f) !!",
+                            (double)gpsDriftNE, (double)(0.3f*checkScaler));
+        }
         dal.snprintf(prearm_fail_string,
                            sizeof(prearm_fail_string),
                            "GPS horizontal speed %.2fm/s (needs %.2f)", (double)gpsDriftNE, (double)(0.3f*checkScaler));
@@ -127,6 +143,11 @@ void NavEKF3_core::calcGpsGoodToAlign(void)
 
     // Report check result as a text string and bitmask
     if (hAccFail) {
+        if (!gpsCheckStatus.bad_hAcc) {
+            gcs().send_text(MAV_SEVERITY_CRITICAL,
+                            "Bad EKF3: GPS horiz acc error %.1fm (needs %.1f) !!", (double)hAcc,
+                            (double)(5.0f*checkScaler));
+        }
         dal.snprintf(prearm_fail_string,
                            sizeof(prearm_fail_string),
                            "GPS horiz error %.1fm (needs %.1f)", (double)hAcc, (double)(5.0f*checkScaler));
@@ -144,6 +165,11 @@ void NavEKF3_core::calcGpsGoodToAlign(void)
     }
     // Report check result as a text string and bitmask
     if (vAccFail) {
+        if (!gpsCheckStatus.bad_vAcc) {
+            gcs().send_text(MAV_SEVERITY_CRITICAL,
+                            "Bad EKF3: GPS vert acc error %.1fm (needs < %.1f) !!", (double)vAcc,
+                            (double)(7.5f * checkScaler));
+        }
         dal.snprintf(prearm_fail_string,
                            sizeof(prearm_fail_string),
                            "GPS vert error %.1fm (needs < %.1f)", (double)vAcc, (double)(7.5f * checkScaler));
@@ -157,6 +183,11 @@ void NavEKF3_core::calcGpsGoodToAlign(void)
 
     // Report check result as a text string and bitmask
     if (gpsSpdAccFail) {
+        if (!gpsCheckStatus.bad_sAcc) {
+            gcs().send_text(MAV_SEVERITY_CRITICAL,
+                            "Bad EKF3: GPS speed acc error %.1f (needs < %.1f) !!",
+                            (double)gpsSpdAccuracy, (double)(1.0f*checkScaler));
+        }
         dal.snprintf(prearm_fail_string,
                            sizeof(prearm_fail_string),
                            "GPS speed error %.1f (needs < %.1f)", (double)gpsSpdAccuracy, (double)(1.0f*checkScaler));
@@ -170,6 +201,10 @@ void NavEKF3_core::calcGpsGoodToAlign(void)
 
     // Report check result as a text string and bitmask
     if (hdopFail) {
+        if (!gpsCheckStatus.bad_hdop) {
+            gcs().send_text(MAV_SEVERITY_CRITICAL, "Bad EKF3: GPS HDOP %.1f (needs 2.5) !!",
+                            (double)(0.01f * gps.get_hdop(preferred_gps)));
+        }
         dal.snprintf(prearm_fail_string, sizeof(prearm_fail_string),
                            "GPS HDOP %.1f (needs 2.5)", (double)(0.01f * gps.get_hdop(preferred_gps)));
         gpsCheckStatus.bad_hdop = true;
@@ -182,6 +217,10 @@ void NavEKF3_core::calcGpsGoodToAlign(void)
 
     // Report check result as a text string and bitmask
     if (numSatsFail) {
+        if (!gpsCheckStatus.bad_sats) {
+            gcs().send_text(MAV_SEVERITY_CRITICAL,
+                            "Bad EKF3: GPS numsats %u (needs 6) !!", gps.num_sats(preferred_gps));
+        }
         dal.snprintf(prearm_fail_string, sizeof(prearm_fail_string),
                            "GPS numsats %u (needs 6)", gps.num_sats(preferred_gps));
         gpsCheckStatus.bad_sats = true;
@@ -200,6 +239,10 @@ void NavEKF3_core::calcGpsGoodToAlign(void)
 
     // Report check result as a text string and bitmask
     if (yawFail) {
+        if (!gpsCheckStatus.bad_yaw) {
+            gcs().send_text(MAV_SEVERITY_CRITICAL, "Bad EKF3: Mag yaw error x=%.1f y=%.1f !!",
+                            (double)magTestRatio.x, (double)magTestRatio.y);
+        }
         dal.snprintf(prearm_fail_string,
                            sizeof(prearm_fail_string),
                            "Mag yaw error x=%.1f y=%.1f",

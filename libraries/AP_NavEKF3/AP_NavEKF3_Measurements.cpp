@@ -688,8 +688,12 @@ void NavEKF3_core::readGpsData()
 
     // convert GPS measurements to local NED and save to buffer to be fused later if we have a valid origin
     if (validOrigin) {
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+        gpsDataNew.pos = gpsloc;
+#else
         gpsDataNew.lat = gpsloc.lat;
         gpsDataNew.lng = gpsloc.lng;
+#endif
         if ((frontend->_originHgtMode & (1<<2)) == 0) {
             gpsDataNew.hgt = (ftype)((double)0.01 * (double)gpsloc.alt - ekfGpsRefHgt);
         } else {
@@ -709,6 +713,26 @@ void NavEKF3_core::readGpsYawData()
     // if the GPS has yaw data then fuse it as an Euler yaw angle
     float yaw_deg, yaw_accuracy_deg;
     uint32_t yaw_time_ms;
+#ifdef INCLUDE_AMH_GPSYAW_CHANGES
+    if (gps.gps_yaw_deg(selected_yaw_gps, yaw_deg, yaw_accuracy_deg, yaw_time_ms) &&
+        yaw_time_ms != yawMeasTime_ms) {
+        // GPS modules are rather too optimistic about their
+        // accuracy. Set to min of 5 degrees here to prevent
+        // the user constantly receiving warnings about high
+        // normalised yaw innovations
+
+        // @amh: The real accuracy of GPS yaw devices is much smaller than 5.0 degrees. I've
+        // mentioned to a couple ArduPilot devs about this exceptionally large mininum yaw
+        // accuracy but never got a response. I've also tried setting this to something more
+        // realistic, like 0.9 but that causes EKF3 to sporadically become unhealthy (though
+        // that test was with a slighlty older dev version of 4.1 so maybe should test it
+        // again).
+        //
+        const ftype min_yaw_accuracy_deg = 5.0f; //0.9f;
+        yaw_accuracy_deg = MAX(yaw_accuracy_deg, min_yaw_accuracy_deg);
+        writeEulerYawAngle(radians(yaw_deg), radians(yaw_accuracy_deg), yaw_time_ms, 2);
+    }
+#else
     if (gps.status(selected_gps) >= AP_DAL_GPS::GPS_OK_FIX_3D &&
         dal.gps().gps_yaw_deg(selected_gps, yaw_deg, yaw_accuracy_deg, yaw_time_ms) &&
         yaw_time_ms != yawMeasTime_ms) {
@@ -720,6 +744,7 @@ void NavEKF3_core::readGpsYawData()
         yaw_accuracy_deg = MAX(yaw_accuracy_deg, min_yaw_accuracy_deg);
         writeEulerYawAngle(radians(yaw_deg), radians(yaw_accuracy_deg), yaw_time_ms, 2);
     }
+#endif
 }
 
 // read the delta angle and corresponding time interval from the IMU
@@ -1116,6 +1141,34 @@ void NavEKF3_core::update_gps_selection(void)
 {
     const auto &gps = dal.gps();
 
+#if defined(INCLUDE_AMH_GPSYAW_CHANGES) && !APM_BUILD_TYPE(APM_BUILD_AP_DAL_Standalone)
+// This ifdef special handling of build type was only required when building the
+// AP_DAL_Standalone tool... which isn't even something I care about but I wanted it fixed so
+// github build "actions" could be happy again.
+//
+// These changes use AP::gps() in the EKF3 code but that is apparently compiled/link in time or
+// place in which it apparently isn't accessible to the linker. Much of the code in
+// AP_NavEKF3_Measurements.cpp could have been changed to use the AP_DAL_GPS versions instead
+// of the AP_GPS versions but `get_type(instance)` is not part of the DAL. I tried adding a
+// get_type to AP_DAL_GPS.cpp but that still required AP::gps() and we were back where we
+// started. Although that was particularly strange since the start_frame() function about 14
+// lines away is using AP::gps()!! That's why I same linker problem was in a time/place rather
+// than just a place.
+
+    if (default_yaw_gps < 0) {
+       for (unsigned i=0; i < AP::gps().num_sensors(); ++i) {
+            if (AP::gps().get_type(i) == AP_GPS::GPS_TYPE_UBLOX_RTK_ROVER) {
+                default_yaw_gps = i;
+                break;
+            }
+       }
+       if (default_yaw_gps >= 0) {
+           GCS_SEND_TEXT(MAV_SEVERITY_INFO, "IMU%u default GPS Yaw device: GPS %d", imu_index,
+                         default_yaw_gps + 1);
+       }
+    }
+#endif
+
     // in normal operation use the primary GPS
     selected_gps = gps.primary_sensor();
     preferred_gps = selected_gps;
@@ -1132,6 +1185,36 @@ void NavEKF3_core::update_gps_selection(void)
             selected_gps = preferred_gps;
         }
     }
+
+#if defined(INCLUDE_AMH_GPSYAW_CHANGES) && !APM_BUILD_TYPE(APM_BUILD_AP_DAL_Standalone)
+    const uint8_t prev_yaw_gps = selected_yaw_gps;
+    if (AP::gps().get_type(selected_gps) == AP_GPS::GPS_TYPE_UBLOX_RTK_ROVER) {
+        selected_yaw_gps = selected_gps;
+    } else if (   (default_yaw_gps >= 0)
+               && (AP::gps().status(default_yaw_gps) >= AP::gps().status(selected_gps))) {
+        // The question here is whether GPS status should be considered if we have a
+        // UBLOX_RTK_ROVER setup. In other words, is the GPS yaw provided by UBLOX_RTK_ROVER
+        // is *always better* than "heading of motion" (which is actually pretty bad)? If it is
+        // always better, then instead of comparing GPS status between 'yaw' and 'selected', we
+        // would simply always use 'default' when it exists (note: 'default' is only set when we
+        // are using UBLOX_RTK_ROVER).
+        selected_yaw_gps = default_yaw_gps;
+    } else {
+        selected_yaw_gps = selected_gps;
+    }
+
+    // If there was a change in selected yaw gps and the result is not MovingBaseline-Rover,
+    // complain about it
+    if (   (prev_yaw_gps != selected_yaw_gps)
+        && frontend->sources.gps_yaw_enabled()
+        && (default_yaw_gps >= 0)
+        && (AP::gps().get_type(default_yaw_gps) == AP_GPS::GPS_TYPE_UBLOX_RTK_ROVER)
+        && (AP::gps().get_type(selected_yaw_gps) != AP_GPS::GPS_TYPE_UBLOX_RTK_ROVER))
+    {
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "MovingBaseline-Rover (GPS %u) is not yaw source!",
+                      default_yaw_gps + 1);
+    }
+#endif
 }
 
 /*

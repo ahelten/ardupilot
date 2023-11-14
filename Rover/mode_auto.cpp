@@ -31,6 +31,27 @@ bool ModeAuto::_enter()
     // set flag to start mission
     waiting_to_start = true;
 
+#ifdef INCLUDE_XTRACK_STATS
+    rover.avg_xtrack_corner_total = 0.0f;
+    rover.avg_xtrack_corner_count = 0;
+    rover.avg_xtrack_straight_total = 0.0f;
+    rover.avg_xtrack_straight_count = 0;
+    rover.avg_xtrack_wp_count = 0;
+    rover.avg_xtrack_wp_total = 0;
+    rover.xtrack_wp_max = 0;
+    rover.xtrack_corner_max = 0;
+    rover.xtrack_straight_max = 0;
+
+    ap_var_type ptype;
+    AP_Float *ap_slow_limit;
+    ap_slow_limit = (AP_Float *)AP_Param::find("WP_SLOW_LIMIT", &ptype);
+    if (ap_slow_limit == nullptr || ptype != AP_PARAM_FLOAT) {
+      rover._slow_limit=0.0f;
+    } else {
+      rover._slow_limit=ap_slow_limit->get();
+    }
+#endif
+
     return true;
 }
 
@@ -80,6 +101,33 @@ void ModeAuto::update()
             if (!g2.wp_nav.reached_destination() || g2.wp_nav.is_fast_waypoint()) {
                 // update navigation controller
                 navigate_to_waypoint();
+
+#ifdef INCLUDE_XTRACK_STATS
+                // update xtrack stats:
+                const double abs_latest_xtrack = fabs(rover.g2.wp_nav.crosstrack_error());
+                if (   (rover.current_loc.get_distance(g2.wp_nav.get_destination()) < rover._slow_limit)
+                    || (rover.current_loc.get_distance(g2.wp_nav.get_origin()) < rover._slow_limit))
+                {
+                    rover.avg_xtrack_corner_total += abs_latest_xtrack;
+                    rover.avg_xtrack_corner_count++;
+                    if (abs_latest_xtrack > rover.xtrack_corner_max) {
+                        rover.xtrack_corner_max = abs_latest_xtrack;
+                    }
+                } else { //straight:
+                    rover.avg_xtrack_straight_total += abs_latest_xtrack;
+                    rover.avg_xtrack_straight_count++;
+                    if (abs_latest_xtrack > rover.xtrack_straight_max) {
+                        rover.xtrack_straight_max = abs_latest_xtrack;
+                    }
+                }
+
+                ++rover.avg_xtrack_wp_count;
+                rover.avg_xtrack_wp_total += abs_latest_xtrack;
+                if (abs_latest_xtrack > rover.xtrack_wp_max) {
+                    rover.xtrack_wp_max = abs_latest_xtrack;
+                }
+#endif
+
             } else {
                 // we have reached the destination so stay here
                 if (rover.is_boat()) {
@@ -624,6 +672,29 @@ void ModeAuto::exit_mission()
     // send message
     gcs().send_text(MAV_SEVERITY_NOTICE, "Mission Complete");
 
+#ifdef INCLUDE_XTRACK_STATS
+    double xtrack_straight = 0;
+    double xtrack_corner = 0;
+    double xtrack_oa = 0;
+
+    if (rover.avg_xtrack_straight_count > 0) {
+        xtrack_straight = rover.avg_xtrack_straight_total / rover.avg_xtrack_straight_count;
+    }
+    if (rover.avg_xtrack_corner_count > 0) {
+        xtrack_corner = rover.avg_xtrack_corner_total / rover.avg_xtrack_corner_count;
+    }
+    if ((rover.avg_xtrack_straight_count + rover.avg_xtrack_corner_count) > 0) {
+        xtrack_oa =   (rover.avg_xtrack_straight_total + rover.avg_xtrack_corner_total)
+                    / (rover.avg_xtrack_straight_count + rover.avg_xtrack_corner_count);
+    }
+
+    gcs().send_text(MAV_SEVERITY_INFO,"Avg xtrk straight: %.4f, Max: %.4f, Num: %lu",
+                    xtrack_straight, rover.xtrack_straight_max, rover.avg_xtrack_straight_count);
+    gcs().send_text(MAV_SEVERITY_INFO,"Avg xtrk corner: %.4f, Max: %.4f, Num: %lu",
+                    xtrack_corner, rover.xtrack_corner_max, rover.avg_xtrack_corner_count);
+    gcs().send_text(MAV_SEVERITY_INFO,"Avg xtrk total: %.4f\n",xtrack_oa);
+#endif
+
     if (g2.mis_done_behave == MIS_DONE_BEHAVE_LOITER && start_loiter()) {
         return;
     }
@@ -842,6 +913,17 @@ bool ModeAuto::verify_nav_wp(const AP_Mission::Mission_Command& cmd)
         } else {
             // send simpler message to GCS
             gcs().send_text(MAV_SEVERITY_INFO, "Reached waypoint #%u", (unsigned int)cmd.index);
+
+#ifdef INCLUDE_XTRACK_STATS
+            if (rover.avg_xtrack_wp_count > 0) {
+                gcs().send_text(MAV_SEVERITY_INFO,"Avg xtrk wp: %.4f, Max: %.4f, Num: %lu",
+                                rover.avg_xtrack_wp_total / rover.avg_xtrack_wp_count,
+                                rover.xtrack_wp_max, rover.avg_xtrack_wp_count);
+                rover.avg_xtrack_wp_count = 0;
+                rover.avg_xtrack_wp_total = 0;
+                rover.xtrack_wp_max = 0;
+            }
+#endif
         }
     }
 

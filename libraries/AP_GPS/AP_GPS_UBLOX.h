@@ -348,6 +348,23 @@ private:
         uint32_t horizontal_accuracy;
         uint32_t vertical_accuracy;
     };
+    struct PACKED ubx_nav_hpposllh {
+        uint8_t version;
+        uint16_t reserved;
+        uint8_t flags;
+        uint32_t itow;                                  // GPS msToW
+        int32_t longitude;
+        int32_t latitude;
+        int32_t altitude_ellipsoid;
+        int32_t altitude_msl;
+        int8_t lonHp;
+        int8_t latHp;
+        int8_t heightHp;
+        int8_t hMSLHp;
+        uint32_t horizontal_accuracy;
+        uint32_t vertical_accuracy;
+      };
+
     struct PACKED ubx_nav_status {
         uint32_t itow;                                  // GPS msToW
         uint8_t fix_type;
@@ -594,6 +611,7 @@ private:
     union PACKED {
         DEFINE_BYTE_ARRAY_METHODS
         ubx_nav_posllh posllh;
+        ubx_nav_hpposllh hpposllh;
         ubx_nav_status status;
         ubx_nav_dop dop;
         ubx_nav_solution solution;
@@ -653,6 +671,7 @@ private:
         MSG_ACK_NACK = 0x00,
         MSG_ACK_ACK = 0x01,
         MSG_POSLLH = 0x2,
+        MSG_HPPOSLLH = 0x14,
         MSG_STATUS = 0x3,
         MSG_DOP = 0x4,
         MSG_SOL = 0x6,
@@ -760,7 +779,7 @@ private:
     uint16_t        _delay_time;
     uint8_t         _next_message;
     uint8_t         _ublox_port;
-    bool            _have_version;
+    bool            _have_version = false;
     struct ubx_mon_ver _version;
     uint32_t        _unconfigured_messages;
     uint8_t         _hardware_generation;
@@ -784,11 +803,12 @@ private:
     // used to update fix between status and position packets
     AP_GPS::GPS_Status next_fix;
 
-    bool _cfg_needs_save;
+    bool _cfg_needs_save = false;
 
     bool noReceivedHdop;
     
-    bool havePvtMsg;
+    bool havePvtMsg = false;
+    bool haveHpposMsg = false;
 
     bool        _configure_message_rate(uint8_t msg_class, uint8_t msg_id, uint8_t rate);
     bool        _configure_valset(ConfigKey key, const void *value, uint8_t layers=UBX_VALSET_LAYER_ALL);
@@ -817,6 +837,10 @@ private:
     // see if we should use uart2 for moving baseline config
     bool mb_use_uart2(void) const {
         return option_set(AP_GPS::DriverOptions::UBX_MBUseUart2)?true:false;
+    }
+    // disable forwarding RTCM3 to the Rover (when using ArduSimple LITE "stack")
+    bool mb_disable_rtcm3(void) const {
+        return option_set(AP_GPS::DriverOptions::UBX_DisableRtcm3)?true:false;
     }
 #endif
 
