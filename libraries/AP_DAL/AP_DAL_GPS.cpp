@@ -51,7 +51,7 @@ void AP_DAL_GPS::start_frame()
         RGPJ.lat = loc.lat;
         RGPJ.lng = loc.lng;
 #ifdef INCLUDE_HIGH_PRECISION_GPS
-        loc.get_latlng(tmp_location[i]);
+        tmp_location[i] = loc;
 #endif
         RGPJ.alt = loc.alt;
         RGPI.have_vertical_velocity = gps.have_vertical_velocity(i);
