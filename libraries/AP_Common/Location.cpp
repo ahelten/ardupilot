@@ -665,6 +665,7 @@ void Location::set_highprecision(int64_t hplat_1e9_degs, int64_t hplng_1e9_degs)
     lng_hp = (int8_t)(hplng_1e9_degs - ((int64_t)lng * 100));
 }
 
+#ifdef INCLUDE_HIGH_PRECISION_GPS
 double Location::get_lat_hp() const
 {
     return ((double)lat / 1e7) + ((double)lat_hp / 1e9);
@@ -682,4 +683,5 @@ void Location::get_latlng(Location &location) const
     location.lat_hp = lat_hp;
     location.lng_hp = lng_hp;
 }
+#endif
 

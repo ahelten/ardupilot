@@ -738,7 +738,12 @@ AP_AHRS_DCM::drift_correction(float deltat)
 
     if (have_gps()) {
         // use GPS for positioning with any fix, even a 2D fix
+#ifdef INCLUDE_HIGH_PRECISION_GPS
         _last_pos = _gps.location();
+#else
+        _last_lat = _gps.location().lat;
+        _last_lng = _gps.location().lng;
+#endif
         _last_pos_ms = AP_HAL::millis();
         _position_offset_north = 0;
         _position_offset_east = 0;

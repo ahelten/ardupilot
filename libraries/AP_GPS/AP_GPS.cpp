@@ -1417,6 +1417,7 @@ void AP_GPS::send_mavlink_gps_raw(mavlink_channel_t chan)
 
 void AP_GPS::send_mavlink_hpposllh_gps_raw(mavlink_channel_t chan)
 {
+#ifdef INCLUDE_HIGH_PRECISION_GPS
     const Location &loc = location(0);
     float yaw_deg = 0.0f;
     float hdg_acc = 0.0f;
@@ -1429,6 +1430,7 @@ void AP_GPS::send_mavlink_hpposllh_gps_raw(mavlink_channel_t chan)
         loc.get_lon_hp(),  // in 1E9 degrees, as a double
         0,                    // TODO: Elipsoid height in mm
         yaw_deg);
+#endif
 }
 
 #if GPS_MAX_RECEIVERS > 1

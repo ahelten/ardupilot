@@ -2,7 +2,7 @@
 
 #include <AP_Math/AP_Math.h>
 
-#define INCLUDE_HIGH_PRECISION_GPS
+#undef INCLUDE_HIGH_PRECISION_GPS
 
 #define LOCATION_ALT_MAX_M  83000   // maximum altitude (in meters) that can be fit into Location structure's alt field
 

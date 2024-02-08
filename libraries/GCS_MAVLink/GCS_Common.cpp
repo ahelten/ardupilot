@@ -5381,6 +5381,7 @@ void GCS_MAVLINK::send_global_position_int()
 
 void GCS_MAVLINK::send_hpposllh_global_position_int()
 {
+#ifdef INCLUDE_HIGH_PRECISION_GPS
     AP_AHRS &ahrs = AP::ahrs();
 
     struct Location curr_loc;
@@ -5393,6 +5394,7 @@ void GCS_MAVLINK::send_hpposllh_global_position_int()
         curr_loc.get_lon_hp(),  // in 1E9 degrees (as a double)
         curr_loc.alt / 100.0f, // height, in meters (hopefully this is height above WGS-84 ellipsoid)
         ahrs.yaw_sensor / 100.0f); // heading, in degrees
+#endif
 }
 
 #if HAL_MOUNT_ENABLED
