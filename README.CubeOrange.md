@@ -14,6 +14,40 @@ Retrieve the code:
       # Or checkout using the latest tag of the latest branch:
     git tag -l | grep ahelten
 
+
+Mavlink Submodule
+----
+
+Don't forget the Mavlink repo:
+
+    cd modules/mavlink
+    git remote add main-mavlink ssh://git@github.com/ArduPilot/mavlink
+    git fetch
+
+To check if there were changes in the verion used by ArduPilot:
+
+1. Go to `ardupilot/modules` directory
+2. Diff the submodule directory with whatever the current ArduPilot tag being synced
+3. Go into the `ardupilot/modules/mavlink` directory and diff my forks' HEAD with the current
+   ArduPilot version
+
+For example:
+
+    $ cd ardupilot/modules
+    $ git diffw Rover-4.4.0 ./mavlink/
+    diff --git a/modules/mavlink b/modules/mavlink
+    index 806a3ba749..ad642f3bdb 160000
+    --- a/modules/mavlink
+    +++ b/modules/mavlink
+    @@ -1 +1 @@
+    -Subproject commit 806a3ba7499da677ded35226d6ff88e5a100c4c2
+    +Subproject commit ad642f3bdbbedc1ddae86af27511dceeff27473d
+
+    $ cd mavlink
+    $ git diffw 806a3ba74
+
+
+
 Build ArduPilot:
 ====
 
