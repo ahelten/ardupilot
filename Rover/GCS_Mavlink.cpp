@@ -529,12 +529,13 @@ static const ap_message STREAM_EXTENDED_STATUS_msgs[] = {
     MSG_GPS2_RAW,
     MSG_GPS2_RTK,
     MSG_HPPOSLLH_GPS_RAW,
-    MSG_HPPOSLLH_LOCATION,
     MSG_NAV_CONTROLLER_OUTPUT,
     MSG_FENCE_STATUS,
     MSG_POSITION_TARGET_GLOBAL_INT,
 };
 static const ap_message STREAM_POSITION_msgs[] = {
+    MSG_ATTITUDE,
+    MSG_HPPOSLLH_LOCATION,
     MSG_LOCATION,
     MSG_LOCAL_POSITION
 };
@@ -547,7 +548,6 @@ static const ap_message STREAM_RC_CHANNELS_msgs[] = {
     MSG_RC_CHANNELS_RAW, // only sent on a mavlink1 connection
 };
 static const ap_message STREAM_EXTRA1_msgs[] = {
-    MSG_ATTITUDE,
     MSG_SIMSTATE,
     MSG_AHRS2,
     MSG_PID_TUNING,
@@ -586,9 +586,9 @@ static const ap_message STREAM_ADSB_msgs[] = {
 };
 
 const struct GCS_MAVLINK::stream_entries GCS_MAVLINK::all_stream_entries[] = {
+    MAV_STREAM_ENTRY(STREAM_POSITION),
     MAV_STREAM_ENTRY(STREAM_RAW_SENSORS),
     MAV_STREAM_ENTRY(STREAM_EXTENDED_STATUS),
-    MAV_STREAM_ENTRY(STREAM_POSITION),
     MAV_STREAM_ENTRY(STREAM_RAW_CONTROLLER),
     MAV_STREAM_ENTRY(STREAM_RC_CHANNELS),
     MAV_STREAM_ENTRY(STREAM_EXTRA1),
