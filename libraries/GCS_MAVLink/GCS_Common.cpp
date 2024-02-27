@@ -5393,7 +5393,7 @@ void GCS_MAVLINK::send_hpposllh_global_position_int()
         curr_loc.get_lat_hp(),  // in 1E9 degrees (as a double)
         curr_loc.get_lon_hp(),  // in 1E9 degrees (as a double)
         curr_loc.alt / 100.0f, // height, in meters (hopefully this is height above WGS-84 ellipsoid)
-        ahrs.yaw_sensor / 100.0f); // heading, in degrees
+        wrap_360(ahrs.yaw_sensor / 100.0f)); // heading, in degrees (0 - 360)
 #endif
 }
 
@@ -5959,6 +5959,7 @@ bool GCS_MAVLINK::try_send_message(const enum ap_message id)
         break;
     }
 
+    mavlink_comm_port[chan]->flush();
     return ret;
 }
 
