@@ -124,7 +124,11 @@ AP_GPS_SBF::read(void)
                                 const char *extra_config;
                                 switch (get_type()) {
                                     case AP_GPS::GPS_Type::GPS_TYPE_SBF_DUAL_ANTENNA:
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+                                        extra_config = "+AttCovEuler+AuxAntPositions+AttEuler+EndOfAtt";
+#else
                                         extra_config = "+AttCovEuler+AuxAntPositions";
+#endif
                                         break;
                                     case AP_GPS::GPS_Type::GPS_TYPE_SBF:
                                     default:
@@ -443,7 +447,11 @@ static bool is_DNU(double value)
 bool
 AP_GPS_SBF::process_message(void)
 {
-    uint16_t blockid = (sbf_msg.blockid & 8191u);
+    // just breakout any consts we need for Do Not Use (DNU) reasons
+    constexpr double doubleDNU = -2e10 + 1; // Add one so we can use '>' with confidence
+    constexpr uint16_t uint16DNU = 65535;
+
+    uint16_t blockid = (sbf_msg.blockid & 0x1fff);
 
     Debug("BlockID %d", blockid);
 
@@ -453,7 +461,7 @@ AP_GPS_SBF::process_message(void)
         const msg4007 &temp = sbf_msg.data.msg4007u;
 
         // Update time state
-        if (temp.WNc != 65535) {
+        if (temp.WNc != uint16DNU) {
             state.time_week = temp.WNc;
             state.time_week_ms = (uint32_t)(temp.TOW);
         }
@@ -462,7 +470,7 @@ AP_GPS_SBF::process_message(void)
         state.last_gps_time_ms = AP_HAL::millis();
 
         // Update velocity state (don't use −2·10^10)
-        if (temp.Vn > -200000) {
+        if (temp.Vn > doubleDNU) {
             state.velocity.x = (float)(temp.Vn);
             state.velocity.y = (float)(temp.Ve);
             state.velocity.z = (float)(-temp.Vu);
@@ -481,8 +489,12 @@ AP_GPS_SBF::process_message(void)
 
         // Update position state (don't use -2·10^10)
         if (temp.Latitude > -200000) {
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+            state.location.update_from_radians(temp.Latitude, temp.Longitude);
+#else
             state.location.lat = (int32_t)(temp.Latitude * RAD_TO_DEG_DOUBLE * (double)1e7);
             state.location.lng = (int32_t)(temp.Longitude * RAD_TO_DEG_DOUBLE * (double)1e7);
+#endif
             state.have_undulation = !is_DNU(temp.Undulation);
             double height = temp.Height;  // in metres
             if (state.have_undulation) {
@@ -603,6 +615,42 @@ AP_GPS_SBF::process_message(void)
     case AuxAntPositions:
     {
 #if GPS_MOVING_BASELINE
+# ifdef INCLUDE_HIGH_PRECISION_GPS
+        if (get_type() == AP_GPS::GPS_Type::GPS_TYPE_SBF_DUAL_ANTENNA) {
+            // calculate yaw using reported antenna positions in earth-frame
+            // note that this calculation does not correct for the vehicle's roll and pitch meaning it is inaccurate at very high lean angles
+            const msg5942 &temp = sbf_msg.data.msg5942u;
+            check_new_itow(temp.TOW, sbf_msg.length);
+            const AuxAntPositionsSub &ant1 = temp.auxAntPositionArray[0];
+            if (temp.N > 0 && ant1.Error == 0 && ant1.AmbiguityType == 0) {
+                // valid RTK integer fix
+                const float rel_heading_deg = degrees(atan2f(ant1.DeltaEast, ant1.DeltaNorth));
+                calculate_moving_base_yaw(rel_heading_deg,
+                                          Vector3f(ant1.DeltaNorth, ant1.DeltaEast, ant1.DeltaUp).length(),
+                                          -ant1.DeltaUp);
+            }
+            auxAntPositionValid = false;
+            if (temp.N <= MAX_NUM_AUX_ANTENNAS)
+            {
+                for (uint8_t i = 0; i < temp.N; ++i)
+                {
+                    const AuxAntPositionsSub &ant = temp.auxAntPositionArray[i];
+                    if (   (ant.Error == NoError)
+                           && (ant.AmbiguityType == FixedAmbiguities)
+                           && (ant.DeltaEast > doubleDNU)
+                           && (ant.DeltaNorth > doubleDNU)
+                           && (ant.DeltaUp > doubleDNU))
+                    {
+                        auxAntPosition = ant;
+                        auxAntPositionValid = true;
+                        break;
+                    }
+                }
+            } else {
+                state.have_gps_yaw = false;
+            }
+        }
+# else
         if (get_type() == AP_GPS::GPS_Type::GPS_TYPE_SBF_DUAL_ANTENNA) {
             // calculate yaw using reported antenna positions in earth-frame
             // note that this calculation does not correct for the vehicle's roll and pitch meaning it is inaccurate at very high lean angles
@@ -616,18 +664,13 @@ AP_GPS_SBF::process_message(void)
                                           -temp.ant1.DeltaUp);
             }
         }
+# endif
 #endif
         break;
     }
     case BaseVectorGeod:
     {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wfloat-equal" // suppress -Wfloat-equal as it's false positive when testing for DNU values
         const msg4028 &temp = sbf_msg.data.msg4028u;
-
-        // just breakout any consts we need for Do Not Use (DNU) reasons
-        constexpr double doubleDNU = -2e-10;
-        constexpr uint16_t uint16DNU = 65535;
 
         check_new_itow(temp.TOW, sbf_msg.length);
 
@@ -642,10 +685,10 @@ AP_GPS_SBF::process_message(void)
 
         state.rtk_num_sats = temp.info.NrSV;
 
-        state.rtk_age_ms = (temp.info.CorrAge != 65535) ? ((uint32_t)temp.info.CorrAge) * 10 : 0;
+        state.rtk_age_ms = (temp.info.CorrAge != uint16DNU) ? ((uint32_t)temp.info.CorrAge) * 10 : 0;
 
         // copy the position as long as the data isn't DNU, we require NED, and heading before accepting any of it
-        if ((temp.info.DeltaEast != doubleDNU) && (temp.info.DeltaNorth != doubleDNU) && (temp.info.DeltaUp != doubleDNU) &&
+        if ((temp.info.DeltaEast > doubleDNU) && (temp.info.DeltaNorth > doubleDNU) && (temp.info.DeltaUp > doubleDNU) &&
             (temp.info.Azimuth != uint16DNU)) {
 
             state.rtk_baseline_y_mm = temp.info.DeltaEast * 1e3;
@@ -654,7 +697,7 @@ AP_GPS_SBF::process_message(void)
 
 #if GPS_MOVING_BASELINE
             // copy the baseline data as a yaw source
-            if (option_set(AP_GPS::DriverOptions::SBF_UseBaseForYaw)) {
+            if (option_set(AP_GPS::DriverOptions::SBF_UseBaseForYaw) && !gnssYawAvailable) {
                 calculate_moving_base_yaw(temp.info.Azimuth * 0.01f + 180.0f,
                                           Vector3f(temp.info.DeltaNorth, temp.info.DeltaEast, temp.info.DeltaUp).length(),
                                           -temp.info.DeltaUp);
@@ -665,12 +708,62 @@ AP_GPS_SBF::process_message(void)
             state.rtk_baseline_y_mm = 0;
             state.rtk_baseline_x_mm = 0;
             state.rtk_baseline_z_mm = 0;
-            state.have_gps_yaw = false;
+            if (!gnssYawAvailable) {
+                state.have_gps_yaw = false;
+            }
         }
 
 #pragma GCC diagnostic pop
         break;
     }
+#if GPS_MOVING_BASELINE
+    case AttEuler:
+    {
+        state.gps_yaw_configured = true;
+        const msg5938 &temp = sbf_msg.data.msg5938u;
+
+        attEulerValid = false;
+        if ((temp.Error.MainAux1_ErrorCode == NoError) && (temp.Error.MainAux2_ErrorCode == NoError)
+            && (temp.Mode != NoAttitude))
+        {
+            attEuler = temp;
+            attEulerValid = true;
+        } else {
+            state.have_gps_yaw = false;
+        }
+        break;
+    }
+    case EndOfAtt:
+    {
+        state.have_gps_yaw_accuracy = true;
+        if (auxAntPositionValid && attEulerValid)
+        {
+            gnssYawAvailable = true;
+            // @amh: The real accuracy is in the AttCovEuler message but there really is no
+            // point in getting the real accuracy because anything smaller than 5.0 degrees is
+            // discarded by NavEKF3_core::readGpsYawData() anyway. And the real accuracy of GPS
+            // yaw is much smaller than 5.0 degrees (for more ranting, see my comment in
+            // NavEKF3_core::readGpsYawData()).
+            state.gps_yaw_accuracy = 1.0;
+            state.have_gps_yaw_accuracy = true;
+            state.rtk_baseline_y_mm = auxAntPosition.DeltaEast * 1e3;
+            state.rtk_baseline_x_mm = auxAntPosition.DeltaNorth * 1e3;
+            state.rtk_baseline_z_mm = auxAntPosition.DeltaUp * -1e3;
+
+            // copy the baseline data as a yaw source
+            calculate_moving_base_yaw(attEuler.Heading,
+                                      Vector3f(auxAntPosition.DeltaNorth,
+                                               auxAntPosition.DeltaEast,
+                                               auxAntPosition.DeltaUp).length(),
+                                      -auxAntPosition.DeltaUp);
+        } else {
+            gnssYawAvailable = false;
+            state.have_gps_yaw = false;
+            state.gps_yaw_accuracy = 999.99999;
+        }
+        break;
+    }
+#endif // GPS_MOVING_BASELINE
     }
 
     return false;

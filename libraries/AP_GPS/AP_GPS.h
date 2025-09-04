@@ -14,6 +14,8 @@
  */
 #pragma once
 
+#define INCLUDE_AMH_GPSYAW_CHANGES
+
 #include "AP_GPS_config.h"
 
 #if AP_GPS_ENABLED
@@ -503,6 +505,7 @@ public:
     //MAVLink Status Sending
     void send_mavlink_gps_raw(mavlink_channel_t chan);
     void send_mavlink_gps2_raw(mavlink_channel_t chan);
+    void send_mavlink_hpposllh_gps_raw(mavlink_channel_t chan);
 
     void send_mavlink_gps_rtk(mavlink_channel_t chan, uint8_t inst);
 
@@ -631,6 +634,7 @@ protected:
         GPSL5HealthOverride = (1U << 5),
         AlwaysRTCMDecode = (1U << 6),
         DisableRTCMDecode = (1U << 7),
+        UBX_DisableRtcm3  = (1U << 8U), // Disable processing/forwarding of RTCM3 messages in u-blox
     };
 
     // check if an option is set

@@ -767,8 +767,12 @@ AP_AHRS_DCM::drift_correction(float deltat)
 
     if (have_gps()) {
         // use GPS for positioning with any fix, even a 2D fix
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+        _last_pos = _gps.location();
+#else
         _last_lat = _gps.location().lat;
         _last_lng = _gps.location().lng;
+#endif
         _last_pos_ms = AP_HAL::millis();
         _position_offset_north = 0;
         _position_offset_east = 0;
@@ -1060,8 +1064,14 @@ void AP_AHRS_DCM::set_external_wind_estimate(float speed, float direction) {
 // dead-reckoning or GPS
 bool AP_AHRS_DCM::get_location(Location &loc) const
 {
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+    loc = _last_pos;
+    // @amh: Should we really use baro() altitude below? Our ground rover gets GPS at 10Hz so
+    // unlikely much change in altitude... except when we switch between GPS and baro altitude!
+#else
     loc.lat = _last_lat;
     loc.lng = _last_lng;
+#endif
     const auto &baro = AP::baro();
     const auto &gps = AP::gps();
     int32_t alt_cm;

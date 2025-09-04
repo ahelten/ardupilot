@@ -34,6 +34,9 @@ void AP_DAL_GPS::start_frame()
         RGPJ.last_message_time_ms = gps.last_message_time_ms(i);
         RGPJ.lat = loc.lat;
         RGPJ.lng = loc.lng;
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+        tmp_location[i] = loc;
+#endif
         RGPJ.alt = loc.alt;
         RGPI.have_vertical_velocity = gps.have_vertical_velocity(i);
 
@@ -41,7 +44,7 @@ void AP_DAL_GPS::start_frame()
         RGPI.vertical_accuracy_returncode = gps.vertical_accuracy(i, RGPJ.vacc);
         RGPJ.hdop = gps.get_hdop(i);
         RGPI.num_sats = gps.num_sats(i);
-        RGPI.get_lag_returncode = gps.get_lag(i, RGPI.lag_sec);
+       RGPI.get_lag_returncode = gps.get_lag(i, RGPI.lag_sec);
 
         RGPJ.velocity = gps.velocity(i);
         RGPI.speed_accuracy_returncode = gps.speed_accuracy(i, RGPJ.sacc);

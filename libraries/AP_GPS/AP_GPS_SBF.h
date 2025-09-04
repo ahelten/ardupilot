@@ -114,8 +114,10 @@ private:
         ReceiverStatus = 4014,
         BaseVectorGeod = 4028,
         VelCovGeodetic = 5908,
+        AttEuler = 5938,
         AttEulerCov = 5939,
         AuxAntPositions = 5942,
+        EndOfAtt = 5943,
     };
 
     struct PACKED msg4007 // PVTGeodetic
@@ -238,6 +240,45 @@ private:
         float Cov_PitchRoll;
     };
 
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+    enum att_error_codes : uint8_t
+    {
+        NoError = 0,
+        NotEnoughMeas = 1,
+        Reserved1 = 2,
+        Reserved2 = 3
+    };
+    enum ambiguity_types : uint8_t
+    {
+        FixedAmbiguities = 0,
+        FloatAmbiguities = 1
+    };
+
+    struct PACKED AuxAntPositionsSub // (Moasic-H multi-antenna)
+    {
+        uint8_t NrSV;
+        att_error_codes Error;
+        ambiguity_types AmbiguityType;
+        uint8_t AuxAntID;
+        double DeltaEast; // m
+        double DeltaNorth; // m
+        double DeltaUp; // m
+        double EastVel; // m/s
+        double NorthVel; // m/s
+        double UpVel; // m/s
+    };
+
+    constexpr static const unsigned MAX_NUM_AUX_ANTENNAS = 2;
+
+    struct PACKED msg5942 // AuxAntPositions (Moasic-H multi-antenna)
+    {
+        uint32_t TOW;
+        uint16_t WNc;
+        uint8_t N;
+        uint8_t SBLength;
+        AuxAntPositionsSub auxAntPositionArray[MAX_NUM_AUX_ANTENNAS];
+    };
+#else
     struct PACKED AuxAntPositionSubBlock {
         uint8_t NrSV;           // total number of satellites tracked by the antenna
         uint8_t Error;          // aux antenna position error code
@@ -259,6 +300,41 @@ private:
         uint8_t SBLength;   // length of one sub-block in bytes
         AuxAntPositionSubBlock ant1;    // first aux antennas position
     };
+#endif
+
+    enum att_mode_code : uint16_t
+    {
+        NoAttitude = 0,
+        HdgPitchPosition_Float = 1,
+        HdgPitchPosition_Fixed = 2,
+        HdgPitchRollPosition_Float = 3,
+        HdgPitchRollPosition_Fixed = 4,
+    };
+    struct PACKED msg5938 // AttEuler (Moasic-H multi-antenna)
+    {
+        uint32_t TOW;
+        uint16_t WNc;
+        uint8_t NrSV;
+        struct {
+            // For Error Code fields:
+            //   Bit 0:   No error
+            //   Bit 1:   Not enough measurements
+            //   Bit 2,3: reserverd
+            uint8_t MainAux1_ErrorCode      : 2;
+            uint8_t MainAux2_ErrorCode      : 2;
+            uint8_t reserved1               : 3;
+            // Guess this means GNSS-basd Attitude is not *configured*?
+            uint8_t GnssAttNotRequested     : 1;
+        } Error;
+        att_mode_code Mode;
+        uint16_t Reserved;
+        float Heading; // degrees
+        float Pitch; // degrees
+        float Roll; // degrees
+        float PitchDot; // degrees/s
+        float RollDot; // degrees/s
+        float HeadingDot; // degrees/s
+    };
 
     union PACKED msgbuffer {
         msg4007 msg4007u;
@@ -266,6 +342,7 @@ private:
         msg4014 msg4014u;
         msg4028 msg4028u;
         msg5908 msg5908u;
+        msg5938 msg5938u;
         msg5939 msg5939u;
         msg5942 msg5942u;
         uint8_t bytes[256];
@@ -308,5 +385,14 @@ private:
     char portIdentifier[5];
     uint8_t portLength;
     bool readyForCommand;
+
+#if GPS_MOVING_BASELINE
+    // For GPS Yaw in multi-antenna devices like Mosaic-H
+    bool gnssYawAvailable = false;
+    msg5938 attEuler;
+    bool attEulerValid = false;
+    AuxAntPositionsSub auxAntPosition;
+    bool auxAntPositionValid = false;
+#endif // GPS_MOVING_BASELINE
 };
 #endif
