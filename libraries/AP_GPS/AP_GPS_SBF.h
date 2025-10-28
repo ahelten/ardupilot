@@ -68,6 +68,9 @@ private:
     static const uint8_t SBF_PREAMBLE1 = '$';
     static const uint8_t SBF_PREAMBLE2 = '@';
 
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+    uint32_t _timeSinceLastStreamConfigSend_ms = 0;
+#endif
     uint8_t _init_blob_index;
     uint32_t _init_blob_time;
     enum class Config_State {
@@ -393,6 +396,7 @@ private:
     bool attEulerValid = false;
     AuxAntPositionsSub auxAntPosition;
     bool auxAntPositionValid = false;
+    uint32_t lastGpsYawAccuracy_ms = 0;
 #endif // GPS_MOVING_BASELINE
 };
 #endif

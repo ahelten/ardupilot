@@ -1,4 +1,34 @@
-Retrieve the code:
+Quick Start
+====
+
+Once the code is accessible:
+
+## CubeOrange
+```
+./waf configure --board CubeOrange
+# Edit code
+./waf rover
+rsync -zaP build/CubeOrange/bin/ardurover.apj gfr@robot2:
+```
+
+## CubeOrangePlus
+```
+./waf configure --board CubeOrangePlus
+# Edit code
+./waf rover
+rsync -zaP build/CubeOrangePlus/bin/ardurover.apj gfr@robot2:
+```
+
+## On the Bot
+```
+# Ubuntu 22.04
+sudo weedbot/scripts/cube_ardupilot_uploader.py --port /dev/ttyAMA2 --baud-flightstack 921600 ~/ardurover.apj
+
+# Ubuntu 24.04
+sudo weedbot/scripts/cube_ardupilot_uploader.py --port /dev/ttyAMA3 --baud-flightstack 921600 ~/ardurover.apj
+````
+
+Retrieve the code
 ====
 
     git clone --recursive git@github.com:ahelten/ardupilot.git
@@ -13,7 +43,6 @@ Retrieve the code:
 
       # Or checkout using the latest tag of the latest branch:
     git tag -l | grep ahelten
-
 
 Mavlink Submodule
 ----

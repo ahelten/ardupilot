@@ -43,7 +43,11 @@ do {                                            \
 #endif
 
 #ifndef GPS_SBF_STREAM_NUMBER
+# ifdef INCLUDE_HIGH_PRECISION_GPS
+  #define GPS_SBF_STREAM_NUMBER 2
+# else
   #define GPS_SBF_STREAM_NUMBER 1
+# endif
 #endif
 
 #define SBF_EXCESS_COMMAND_BYTES 5 // 2 start bytes + validity byte + space byte + endline byte
@@ -113,24 +117,26 @@ AP_GPS_SBF::read(void)
                     if (config_string == nullptr) {
                         switch (config_step) {
                             case Config_State::Baud_Rate:
+#ifndef INCLUDE_HIGH_PRECISION_GPS // Don't do this for Hi-Precision, it clobbers good settings with bad!
                                 if (asprintf(&config_string, "scs,COM%d,baud%d,bits8,No,bit1,%s\n",
                                              (int)params.com_port,
                                              230400,
                                              port->get_flow_control() != AP_HAL::UARTDriver::flow_control::FLOW_CONTROL_ENABLE ? "none" : "RTS|CTS") == -1) {
                                     config_string = nullptr;
                                 }
+#endif
                                 break;
                             case Config_State::SSO:
                                 const char *extra_config;
                                 switch (get_type()) {
                                     case AP_GPS::GPS_Type::GPS_TYPE_SBF_DUAL_ANTENNA:
-#ifdef INCLUDE_HIGH_PRECISION_GPS
-                                        extra_config = "+AttCovEuler+AuxAntPositions+AttEuler+EndOfAtt";
-#else
                                         extra_config = "+AttCovEuler+AuxAntPositions";
-#endif
                                         break;
                                     case AP_GPS::GPS_Type::GPS_TYPE_SBF:
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+                                        extra_config = "+AttCovEuler+AuxAntPositions+AttEuler+EndOfAtt";
+                                        break;
+#endif
                                     default:
                                         extra_config = "";
                                         break;
@@ -143,6 +149,7 @@ AP_GPS_SBF::read(void)
                                 }
                                 break;
                             case Config_State::Constellation:
+#ifndef INCLUDE_HIGH_PRECISION_GPS
                                 if ((params.gnss_mode&0x6F)!=0) {
                                     //IMES not taken into account by Septentrio receivers
                                     if (asprintf(&config_string, "sst, %s%s%s%s%s%s\n", (params.gnss_mode&(1U<<0))!=0 ? "GPS" : "",
@@ -154,6 +161,7 @@ AP_GPS_SBF::read(void)
                                         config_string=nullptr;
                                     }
                                 }
+#endif
                                 break;
                             case Config_State::Blob:
                                 if (asprintf(&config_string, "%s\n", _initialisation_blob[_init_blob_index]) == -1) {
@@ -180,6 +188,7 @@ AP_GPS_SBF::read(void)
                                 break;
                             case Config_State::SGA:
                             {
+#ifndef INCLUDE_HIGH_PRECISION_GPS
                                 const char *targetGA = "none";
                                 if (get_type() == AP_GPS::GPS_Type::GPS_TYPE_SBF_DUAL_ANTENNA) {
                                     targetGA = "MultiAntenna";
@@ -187,6 +196,7 @@ AP_GPS_SBF::read(void)
                                 if (asprintf(&config_string, "sga, %s\n", targetGA)) {
                                   config_string = nullptr;
                                 }
+#endif
                                 break;
                             }
                             case Config_State::Complete:
@@ -219,10 +229,47 @@ AP_GPS_SBF::read(void)
             }
         }
     }
+#ifdef INCLUDE_HIGH_PRECISION_GPS
+    else if ((_timeSinceLastStreamConfigSend_ms == 0) || !state.have_gps_yaw_accuracy) {
+        if ((AP_HAL::millis() - _timeSinceLastStreamConfigSend_ms) > 5000) {
+            const char *extra_config;
+            switch (get_type()) {
+              case AP_GPS::GPS_Type::GPS_TYPE_SBF_DUAL_ANTENNA:
+                  extra_config = "+AttCovEuler+AuxAntPositions";
+                  break;
+              case AP_GPS::GPS_Type::GPS_TYPE_SBF:
+                  extra_config = "+AttCovEuler+AuxAntPositions+AttEuler+EndOfAtt";
+                  break;
+              default:
+                  extra_config = "";
+                  break;
+            }
+            if (asprintf(&config_string, "sso,Stream%d,COM%d,PVTGeodetic+DOP+ReceiverStatus+VelCovGeodetic+BaseVectorGeod%s,msec100\n",
+                         (int)GPS_SBF_STREAM_NUMBER,
+                         (int)params.com_port,
+                         extra_config) == -1) {
+            }
+
+            if (config_string != nullptr) {
+                const size_t config_length = strlen(config_string);
+                if (config_length <= port->txspace()) {
+                    _timeSinceLastStreamConfigSend_ms = AP_HAL::millis();
+                    Debug("SBF sending init string: %s", config_string);
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Sending SBF init: %s", config_string);
+                    port->write((const uint8_t*)config_string, config_length);
+                    readyForCommand = false;
+                }
+            }
+        }
+    }
+#endif
 
     // yaw timeout after 300 milliseconds
     if ((now - state.gps_yaw_time_ms) > 300) {
         state.have_gps_yaw = false;
+        state.have_gps_yaw_accuracy = false;
+    }
+    if ((now - lastGpsYawAccuracy_ms) > 5000) {
         state.have_gps_yaw_accuracy = false;
     }
 
@@ -590,7 +637,12 @@ AP_GPS_SBF::process_message(void)
     {
         // yaw accuracy is taken from this message even though we actually calculate the yaw ourself (see AuxAntPositions below)
         // this is OK based on the assumption that the calculation methods are similar and that inaccuracy arises from the sensor readings
+# ifdef INCLUDE_HIGH_PRECISION_GPS
+        if (   (get_type() == AP_GPS::GPS_Type::GPS_TYPE_SBF_DUAL_ANTENNA)
+            || (get_type() == AP_GPS::GPS_Type::GPS_TYPE_SBF)) {
+#else
         if (get_type() == AP_GPS::GPS_Type::GPS_TYPE_SBF_DUAL_ANTENNA) {
+#endif
             const msg5939 &temp = sbf_msg.data.msg5939u;
 
             check_new_itow(temp.TOW, sbf_msg.length);
@@ -606,6 +658,7 @@ AP_GPS_SBF::process_message(void)
 #pragma GCC diagnostic pop
                 state.gps_yaw_accuracy = sqrtf(temp.Cov_HeadHead);
                 state.have_gps_yaw_accuracy = true;
+                lastGpsYawAccuracy_ms = AP_HAL::millis();
             } else {
                 state.gps_yaw_accuracy = false;
             }
@@ -629,6 +682,9 @@ AP_GPS_SBF::process_message(void)
                                           Vector3f(ant1.DeltaNorth, ant1.DeltaEast, ant1.DeltaUp).length(),
                                           -ant1.DeltaUp);
             }
+        }
+        else {
+            const msg5942 &temp = sbf_msg.data.msg5942u;
             auxAntPositionValid = false;
             if (temp.N <= MAX_NUM_AUX_ANTENNAS)
             {
@@ -735,17 +791,25 @@ AP_GPS_SBF::process_message(void)
     }
     case EndOfAtt:
     {
-        state.have_gps_yaw_accuracy = true;
         if (auxAntPositionValid && attEulerValid)
         {
             gnssYawAvailable = true;
+#if 0
             // @amh: The real accuracy is in the AttCovEuler message but there really is no
             // point in getting the real accuracy because anything smaller than 5.0 degrees is
             // discarded by NavEKF3_core::readGpsYawData() anyway. And the real accuracy of GPS
             // yaw is much smaller than 5.0 degrees (for more ranting, see my comment in
             // NavEKF3_core::readGpsYawData()).
             state.gps_yaw_accuracy = 1.0;
-            state.have_gps_yaw_accuracy = true;
+#endif
+            // Setting this here unconditionally to prevent issues with the AttCovEuler message
+            // not being enabled (it wasn't in legacy Septentrio setup and it appears that our
+            // attempt to setup Septentrio SBF streams doesn't actually do anything!)
+            if (fabs(state.gps_yaw_accuracy) < 0.0001)
+            {
+                state.gps_yaw_accuracy = 1.0;
+            }
+
             state.rtk_baseline_y_mm = auxAntPosition.DeltaEast * 1e3;
             state.rtk_baseline_x_mm = auxAntPosition.DeltaNorth * 1e3;
             state.rtk_baseline_z_mm = auxAntPosition.DeltaUp * -1e3;

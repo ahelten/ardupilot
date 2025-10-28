@@ -423,6 +423,15 @@ bool AP_GPS_Backend::calculate_moving_base_yaw(AP_GPS::GPS_State &interim_state,
             if (reported_D < min_D || reported_D > max_D) {
                 // the vertical component is out of range, reject it
                 Debug("bad alt_err %f < %f < %f", (double)min_D, (double)reported_D, (double)max_D);
+                uint32_t lastprint_ms = 0;
+                if ((AP_HAL::millis() - lastprint_ms) > 10000)
+                {
+                    lastprint_ms = AP_HAL::millis();
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO,
+                                  "bad alt %.2f<%.2f<%.2f %.3f %.4f",
+                                  (double)min_D, (double)reported_D, (double)max_D,
+                                  offset_dist, reported_distance);
+                }
                 goto bad_yaw;
             }
         }
