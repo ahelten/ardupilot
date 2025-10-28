@@ -7,7 +7,7 @@
 #include "ap_version.h"
 
 // NOTE: The 'N' in 'Vx.y.z-N-gfr' needs to match the 'N' in '(FIRMWARE_VERSION_TYPE_DEV+N)' to set FW_TYPE
-#define THISFIRMWARE "ArduRover V4.6.2-1-gfr"
+#define THISFIRMWARE "ArduRover V4.6.2-2-gfr"
 
 // the following line is parsed by the autotest scripts
 #define FIRMWARE_VERSION 4,6,2,FIRMWARE_VERSION_TYPE_OFFICIAL
