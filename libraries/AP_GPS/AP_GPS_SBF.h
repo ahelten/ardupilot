@@ -70,6 +70,7 @@ private:
 
 #ifdef INCLUDE_HIGH_PRECISION_GPS
     uint32_t _timeSinceLastStreamConfigSend_ms = 0;
+    uint32_t _numberOfStreamConfigSends = 0;
 #endif
     uint8_t _init_blob_index;
     uint32_t _init_blob_time;

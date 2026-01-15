@@ -230,8 +230,9 @@ AP_GPS_SBF::read(void)
         }
     }
 #ifdef INCLUDE_HIGH_PRECISION_GPS
-    else if ((_timeSinceLastStreamConfigSend_ms == 0) || !state.have_gps_yaw_accuracy) {
-        if ((AP_HAL::millis() - _timeSinceLastStreamConfigSend_ms) > 5000) {
+    else if (   ((_timeSinceLastStreamConfigSend_ms == 0) || !state.have_gps_yaw_accuracy)
+             && (_numberOfStreamConfigSends < 10)) {
+        if ((AP_HAL::millis() - _timeSinceLastStreamConfigSend_ms) > 15000) {
             const char *extra_config;
             switch (get_type()) {
               case AP_GPS::GPS_Type::GPS_TYPE_SBF_DUAL_ANTENNA:
@@ -255,7 +256,9 @@ AP_GPS_SBF::read(void)
                 if (config_length <= port->txspace()) {
                     _timeSinceLastStreamConfigSend_ms = AP_HAL::millis();
                     Debug("SBF sending init string: %s", config_string);
-                    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Sending SBF init: %s", config_string);
+                    ++_numberOfStreamConfigSends;
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Send SBF init (no yaw_acc): %s",
+                                  config_string);
                     port->write((const uint8_t*)config_string, config_length);
                     readyForCommand = false;
                 }
